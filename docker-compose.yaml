@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+  postgres_db:
+    image: postgres:17
+    container_name: postgres_db
+    user: postgres
+    restart: always
+    networks:
+      - proxy_network
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=ocean
+    volumes:
+      - postgres_db:/var/lib/postgresql/data
+      - ./backup.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ocean"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  express_backend:
+    build: ./backend-express
+    container_name: express_backend
+    env_file:
+      - ./backend-express/.env
+    networks:
+      - proxy_network
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - BACKEND_URL=http://113.160.200.14/quanlytainguyen/api/express
+      - FRONTEND_URL=http://113.160.200.14/quanlytainguyen
+      - DB_HOST=postgres_db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=admin
+      - DB_NAME=ocean
+      - FLASK_API_URL=http://flask_backend:5001
+      - FLASK_INTERNAL_HOST_HEADER=localhost:5001
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+
+  flask_backend:
+    build: ./backend-flask
+    container_name: flask_backend
+    networks:
+      - proxy_network
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_TRUSTED_HOSTS=localhost,localhost:5001,127.0.0.1,127.0.0.1:5001,flask_backend,flask_backend:5001
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=http://113.160.200.14/quanlytainguyen/
+    container_name: frontend
+    networks:
+      - proxy_network
+    ports:
+      - "8082:80"
+    restart: always
+    depends_on:
+      - express_backend
+
+networks:
+  proxy_network:
+    driver: bridge
+
+volumes:
+  postgres_db:

@@ -1,0 +1,17 @@
+node_modules/
+**/node_modules/
+
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+.env
+*.log
+
+dist/
+build/
+coverage/
+
+dump-ocean-202512191103/
+backup.sql

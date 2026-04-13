@@ -1,0 +1,33 @@
+b1: chuyển file
+rsync -avz --progress \
+  --exclude='node_modules/' \
+  --exclude='.vscode/' \
+  --exclude='.git/' \
+  --exclude='.gitignore' \
+  --exclude='backend-flask/data/' \
+  --exclude='backend-flask/venv/' \
+  --exclude='backend-flask/model/' \
+  --exclude='backend-flask/copernicus_temp_data/' \
+  --exclude='backend-flask/export_full_raw.csv' \
+  --exclude='backend-flask/notebook.ipynb' \
+  --exclude='backend-flask/prediction_module/__pycache__/' \
+  --exclude='backend-flask/__pycache__/' \
+  --exclude='*.log' \
+  --exclude='.env*' \
+  --exclude='**/exports/' \
+  --exclude='**/logs/' \
+  --exclude='**/uploads/' \
+  --exclude='dist/' \
+  --exclude='build/' \
+  ./ tbu@14.253.124.159:/home/tbu/complete/
+b2: clear các volume, container, iamge cũ
+    sudo docker  container ls
+    sudo docker volume ls
+    sudo docker image ls
+    sudo docker stop container_name (kiểm tra xem có container nào có tên bắt đầu là complete không)
+    sudo docker rm container_name (kiểm tra xem có container nào có tên bắt đầu là complete không)
+    sudo docker volume rm volume_name (kiểm tra xem có volume nào có tên bắt đầu là complete không)
+    sudo docker rmi image_name (kiểm tra xem có image nào có tên bắt đầu là complete không)
+b3:
+  docker compose up -d
+

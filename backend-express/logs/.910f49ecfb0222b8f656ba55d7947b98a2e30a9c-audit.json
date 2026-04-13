@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "D:\\Bách Khoa\\Quản lý tài nguyên biển\\DATN_LeDuyNghiem_20215102-20260223T020841Z-1-001\\DATN_LeDuyNghiem_20215102\\source code hệ thống\\backend-express\\logs\\.910f49ecfb0222b8f656ba55d7947b98a2e30a9c-audit.json",
+    "files": [
+        {
+            "date": 1775058080667,
+            "name": "D:\\Bách Khoa\\Quản lý tài nguyên biển\\DATN_LeDuyNghiem_20215102-20260223T020841Z-1-001\\DATN_LeDuyNghiem_20215102\\source code hệ thống\\backend-express\\logs\\app-2026-04-01.log",
+            "hash": "1f0f6169f1c66722f0fb85433710e9aa8a5b57c8ddd8a282944bdca8cc5680e1"
+        },
+        {
+            "date": 1775062800030,
+            "name": "D:\\Bách Khoa\\Quản lý tài nguyên biển\\DATN_LeDuyNghiem_20215102-20260223T020841Z-1-001\\DATN_LeDuyNghiem_20215102\\source code hệ thống\\backend-express\\logs\\app-2026-04-02.log",
+            "hash": "74633b6c4ae85b25ef4b2aa66a42b7391f157ed780e42f3df581e33043a1e0f2"
+        }
+    ],
+    "hashType": "sha256"
+}

@@ -1,0 +1,393 @@
+/* InteractiveMap.css */
+.map-with-sidebar-container {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  background-color: #f5f5f5;
+  overflow: hidden;
+}
+
+/* Left Sidebar - Floating Card */
+.left-sidebar {
+  position: absolute;
+  top: 80px; /* Below header */
+  left: 20px;
+  width: 420px;
+  max-height: calc(100vh - 120px); /* Limit height */
+  z-index: 1000;
+  pointer-events: none;
+  transition: transform 0.3s ease-in-out;
+}
+
+.left-sidebar.collapsed {
+  transform: translateX(-440px); /* width + margins */
+}
+
+/* Semi-circular sidebar handle (middle-left) */
+.sidebar-handle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 72px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-left: none;
+  border-top-right-radius: 36px;
+  border-bottom-right-radius: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  z-index: 1100;
+  cursor: pointer;
+  color: #1890ff;
+}
+
+.sidebar-handle:hover {
+  color: #40a9ff;
+}
+
+.sidebar-card {
+  pointer-events: auto;
+  max-height: calc(100vh - 120px);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-card .ant-card-body {
+  max-height: calc(100vh - 160px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Areas List */
+.areas-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 8px 0 16px;
+  max-height: calc(100vh - 350px);
+}
+
+.areas-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.areas-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.areas-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.areas-list::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+
+/* Map Container */
+.map-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  min-width: 100vw !important;
+  z-index: 1;
+}
+
+/* Override any inherited max-width */
+.map-container * {
+  max-width: none !important;
+}
+
+/* Move Leaflet zoom controls to bottom right */
+.leaflet-control-zoom {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  top: auto !important;
+  left: auto !important;
+  z-index: 1000 !important;
+}
+
+/* Right Filter Floating Card */
+.right-filter {
+  position: absolute;
+  top: 80px;
+  left: 460px; /* Position next to main card (420px + 20px + 20px margin) */
+  width: 280px;
+  max-height: calc(100vh - 120px);
+  z-index: 1000;
+  pointer-events: none;
+  transition: all 0.3s ease-in-out;
+}
+
+.right-filter .ant-card {
+  pointer-events: auto;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.right-filter .ant-card-body {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.right-filter .ant-card-head {
+  padding: 0 12px;
+  min-height: 40px;
+}
+
+.right-filter .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Filter button styling */
+.filter-button {
+  color: #1890ff !important;
+  border-color: #1890ff !important;
+}
+
+.filter-button:hover {
+  color: #40a9ff !important;
+  border-color: #40a9ff !important;
+}
+
+/* Right Detail Card */
+.right-detail {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  bottom: 20px;
+  width: 400px;
+  z-index: 1000;
+  pointer-events: none;
+  transition: all 0.3s ease-in-out;
+}
+
+.right-detail .ant-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.right-detail .ant-card-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.right-detail .ant-card-head {
+  padding: 0 12px;
+  min-height: 40px;
+}
+
+.right-detail .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Area List Items */
+.area-list-item {
+  padding: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+/* Disable shadow for Ant List items */
+.sidebar-card .ant-list-item,
+.ant-list-items,
+.sidebar-card .ant-list-item:hover,
+.area-list-item,
+.area-list-item:hover {
+  box-shadow: none !important;
+}
+
+.area-list-item:hover {
+  background-color: #f5f5f5;
+  border-color: #d9d9d9;
+}
+
+.area-list-item.selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+}
+
+.area-marker-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.area-marker-icon.oyster {
+  background-color: #1890ff;
+}
+
+.area-marker-icon.cobia {
+  background-color: #52c41a;
+}
+
+.area-popup {
+  min-width: 200px;
+}
+
+.area-popup .ant-typography {
+  margin-bottom: 8px;
+}
+
+.area-popup .ant-typography:last-child {
+  margin-bottom: 0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .left-sidebar {
+    top: 70px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-height: calc(50vh - 50px);
+  }
+  
+  .sidebar-card {
+    max-height: calc(50vh - 50px);
+  }
+  
+  .sidebar-card .ant-card-body {
+    max-height: calc(50vh - 90px);
+    padding: 12px;
+    overflow: hidden;
+  }
+
+  .areas-list {
+    max-height: calc(50vh - 200px);
+  }
+
+  .right-filter {
+    left: 10px;
+    right: 10px;
+    width: auto;
+    top: calc(50vh + 20px);
+  }
+
+  .right-detail {
+    left: 10px;
+    right: 10px;
+    width: auto;
+    top: calc(50vh + 20px);
+  }
+}
+
+@media (max-width: 480px) {
+  .left-sidebar {
+    top: 60px;
+    left: 8px;
+    right: 8px;
+    max-height: calc(45vh - 40px);
+  }
+  
+  .sidebar-card {
+    max-height: calc(45vh - 40px);
+  }
+  
+  .sidebar-card .ant-card-body {
+    max-height: calc(45vh - 80px);
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  .areas-list {
+    max-height: calc(45vh - 180px);
+  }
+  
+  .area-list-item {
+    padding: 6px;
+  }
+
+  .right-filter {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: calc(45vh + 20px);
+  }
+
+  .right-detail {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: calc(45vh + 20px);
+  }
+}
+
+/* Leaflet popup customization */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+  line-height: 1.4;
+}
+
+.leaflet-popup-tip {
+  background: white;
+  border: 1px solid #ccc;
+}
+
+/* Custom marker styles */
+.custom-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Search bar styling */
+.floating-search-bar .ant-input,
+.floating-search-bar .ant-select {
+  border-radius: 6px;
+}
+
+.floating-search-bar .ant-input:focus,
+.floating-search-bar .ant-select:focus {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}

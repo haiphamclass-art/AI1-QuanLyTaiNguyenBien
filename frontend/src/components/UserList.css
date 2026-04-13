@@ -1,0 +1,271 @@
+/* UserManagementPage.css */
+* {
+  box-sizing: border-box;
+}
+
+/* Fix table positioning issues */
+.user-actions-table .ant-table-tbody > tr > td {
+  position: relative;
+  vertical-align: middle;
+  background: white;
+  white-space: nowrap;
+}
+
+.user-actions-table .ant-table-thead > tr > th:last-child {
+  position: sticky;
+  right: 0;
+  background: #fafafa !important;
+  z-index: 20;
+  top: 0;
+}
+
+.user-actions-table .ant-table-tbody > tr > td:last-child {
+  position: sticky;
+  right: 0;
+  background: white !important;
+  z-index: 10;
+  top: auto;
+}
+
+/* Ensure proper alignment for action buttons */
+.user-actions-table .ant-table-tbody > tr > td:last-child .ant-space {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-management {
+  max-width: 70%;
+  margin: 20px auto;
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.search-input {
+  padding: 10px;
+  width: 250px;
+  margin: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.add-btn {
+  padding: 10px 20px;
+  background-color: #28a745;
+  border: none;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 10px;
+}
+
+.add-btn:hover {
+  background-color: #218838;
+}
+
+.user-table {
+  width: 100%;
+  overflow-x: scroll;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.user-table th,
+.user-table td {
+  padding: 12px;
+  border: 1px solid #ddd;
+  text-align: center;
+  font-size: 14px;
+}
+
+.user-table th {
+  background-color: #f8f9fa;
+}
+
+.user-table td button {
+  padding: 6px 12px;
+  margin: 2px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.user-table td button:first-child {
+  background-color: #007bff;
+  color: #fff;
+}
+
+.user-table td button:last-child {
+  background-color: #dc3545;
+  color: #fff;
+}
+
+.user-table td button:hover {
+  opacity: 0.8;
+}
+
+/* Popup styles */
+.popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.popup-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90%;
+  text-align: center;
+  box-shadow: 0 0 15px rgba(0,0,0,0.2);
+}
+
+.popup-content h3 {
+  margin-bottom: 20px;
+  font-size: 18px;
+}
+
+.popup-content form,
+.popup-content .popup-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.popup-content input,
+.popup-content select {
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.popup-actions {
+  display: flex;
+  justify-content: space-around;
+}
+
+.popup-actions button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.popup-actions button:first-child {
+  background-color: #007bff;
+  color: #fff;
+}
+
+.popup-actions button:last-child {
+  background-color: #dc3545;
+  color: #fff;
+}
+
+.popup-actions button:hover {
+  opacity: 0.8;
+}
+
+.revealed-password {
+  margin-top: 15px;
+  font-size: 16px;
+  color: #333;
+}
+
+/* Fix table layout and prevent overlap issues */
+.ant-table-wrapper {
+  position: relative;
+  z-index: 1;
+  background: white;
+}
+
+.ant-table {
+  position: relative;
+  z-index: 1;
+  background: white;
+}
+
+.ant-table-thead > tr > th {
+  position: relative;
+  z-index: 2;
+  background: #fafafa !important;
+}
+
+.ant-table-tbody > tr > td {
+  position: relative;
+  z-index: 1;
+  background: white !important;
+}
+
+/* Ensure proper spacing for action buttons */
+.ant-table-tbody > tr > td:last-child {
+  white-space: nowrap;
+  padding: 8px 12px;
+}
+
+/* Fix any potential dropdown overlap issues */
+.ant-dropdown {
+  z-index: 1050 !important;
+}
+
+.ant-modal {
+  z-index: 1000 !important;
+}
+
+/* Specific styles for user actions table */
+.user-actions-table {
+  position: relative;
+  z-index: 1;
+  background: white;
+}
+
+.user-actions-table .ant-table-thead > tr > th {
+  background: #fafafa !important;
+  border-bottom: 1px solid #f0f0f0;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 15;
+}
+
+.user-actions-table .ant-table-thead > tr > th:last-child {
+  position: sticky;
+  right: 0;
+  top: 0;
+  z-index: 25;
+  background: #fafafa !important;
+}
+
+.user-actions-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+  background: white !important;
+  white-space: nowrap;
+}
+
+.user-actions-table .ant-table-tbody > tr:hover > td {
+  background: #f5f5f5 !important;
+}

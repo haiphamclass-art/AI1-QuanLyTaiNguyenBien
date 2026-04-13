@@ -1,0 +1,152 @@
+.custom-sider::-webkit-scrollbar {
+  width: 6px;
+  background: #fff;
+}
+.custom-sider::-webkit-scrollbar-thumb {
+  background: #e0e0e0;
+  border-radius: 4px;
+}
+.custom-sider {
+  scrollbar-width: thin;
+  scrollbar-color: #e0e0e0 #fff;
+}
+
+/* Fix Ant Design Pagination overflow and centering */
+.ant-pagination {
+  display: flex !important;
+   justify-content: flex-end !important;
+  width: 100% !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  margin: 0 auto 16px auto !important;
+  box-shadow: none !important;
+  max-width: 100% !important;
+}
+
+/* Fix vertical alignment of Ant Design Pagination numbers */
+.ant-pagination-item,
+.ant-pagination-item-link {
+  line-height: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  font-size: 16px !important;
+  vertical-align: middle !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box;
+}
+
+/* Fix vertical alignment of Ant Design Pagination arrows */
+.ant-pagination-prev,
+.ant-pagination-next {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 32px !important;
+}
+
+.ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination-next .ant-pagination-item-link {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  line-height: 32px !important;
+  font-size: 16px !important;
+  vertical-align: middle !important;
+  box-sizing: border-box;
+}
+
+ul {
+  border: none !important;
+}
+input {
+  max-width: 100% !important;
+  margin: auto !important;
+}
+
+input[type='text'] {
+  width: 100% !important;
+  margin: 0px !important;
+  max-width: 100% !important;
+  margin: auto !important;
+  box-shadow: none !important;
+}
+
+/* Ensure header always stays on top */
+.ant-layout-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1000 !important;
+}
+
+/* Ensure tables don't overlap with header */
+.ant-table-wrapper {
+  position: relative !important;
+  z-index: 1 !important;
+  background: white !important;
+}
+
+.ant-table {
+  position: relative !important;
+  z-index: 1 !important;
+  background: white !important;
+}
+
+.ant-table-thead > tr > th {
+  background: #fafafa !important;
+}
+
+.ant-table-tbody > tr > td {
+  background: white !important;
+}
+
+/* Fix UserList table transparency issues */
+.user-actions-table .ant-table-tbody > tr > td {
+  background: white !important;
+  opacity: 1 !important;
+}
+
+.user-actions-table .ant-table-thead > tr > th {
+  background: #fafafa !important;
+  opacity: 1 !important;
+}
+
+/* Fix List width issues in modals */
+.ant-list-items {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.ant-list-item {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Fix sticky behavior for all tables */
+.ant-table-thead > tr > th:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  top: 0 !important;
+  z-index: 25 !important;
+  background: #fafafa !important;
+}
+
+.ant-table-tbody > tr > td:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  background: white !important;
+  z-index: 10 !important;
+}
+
+/* Ensure all table headers are sticky */
+.ant-table-thead > tr > th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 15 !important;
+  background: #fafafa !important;
+}
+
+

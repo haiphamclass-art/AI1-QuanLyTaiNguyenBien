@@ -1,0 +1,56 @@
+.prediction-container {
+  width: 700px;
+  margin: 20px auto;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 10px;
+  cursor: pointer;
+  border: none;
+  background-color: #f0f0f0;
+  font-weight: 600;
+}
+
+.tabs button.active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.prediction-form,
+.batch-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-form input,
+.prediction-form select,
+.batch-form input {
+  padding: 10px;
+  margin-bottom: 15px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+button {
+  padding: 10px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #2563eb;
+}

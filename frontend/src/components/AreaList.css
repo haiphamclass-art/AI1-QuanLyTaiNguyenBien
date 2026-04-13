@@ -1,0 +1,296 @@
+/* Main content styles */
+
+/* General styles */
+.app {
+  width: 70%;
+  margin: 20px auto;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+/* Header (Search bar and filters) */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  padding: 10px;
+  width: 250px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  margin: 10px;
+}
+
+.filter-select, .filter-input {
+  padding: 10px;
+  margin: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.filter-select {
+  width: 180px;
+}
+
+.filter-input {
+  width: 120px;
+}
+
+.add-btn {
+  padding: 10px 20px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  margin: 10px;
+}
+
+.add-btn:hover {
+  background-color: #218838;
+}
+
+/* Table styles */
+.table-container {
+  margin-top: 30px;
+  position: relative;
+  z-index: 1;
+}
+
+.area-table {
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-top: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.area-table th, .area-table td {
+  padding: 15px;
+  border: 1px solid #ddd;
+  text-align: left;
+  font-size: 14px;
+}
+
+.area-table th {
+  background-color: #f8f9fa;
+  font-weight: bold;
+}
+
+.area-table td {
+  background-color: #fff;
+}
+
+.area-table td button {
+  padding: 8px 12px;
+  margin: 5px;
+  font-size: 14px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.area-table td button:first-child {
+  background-color: #007bff;
+  color: white;
+}
+
+.area-table td button:last-child {
+  background-color: #dc3545;
+  color: white;
+}
+
+.area-table td button:hover {
+  opacity: 0.8;
+}
+
+/* Popup for Add/Update Area */
+.popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: max-content;
+  height: max-content;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+}
+
+.popup-content {
+  background-color: white;
+  padding: 20px;
+  width: max-content !important;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+}
+
+.popup-content h3 {
+  margin-bottom: 20px;
+  font-size: 18px;
+}
+
+.popup-content form {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-content input, .popup-content select {
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.popup-content button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.popup-content button[type="button"] {
+  background-color: #dc3545;
+}
+
+.popup-content button:hover {
+  opacity: 0.8;
+}
+
+.popup-content button[type="button"]:hover {
+  background-color: #c82333;
+}
+
+/* Confirm Delete Popup */
+.confirm-delete-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+}
+
+.confirm-delete-popup .popup-content {
+  width: 300px;
+}
+
+.confirm-delete-popup h3 {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.confirm-delete-popup button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+  margin: 0 10px;
+}
+
+.confirm-delete-popup button[type="button"] {
+  background-color: #dc3545;
+}
+
+.confirm-delete-popup button:hover {
+  opacity: 0.8;
+}
+
+/* Lat/Long Filters Layout */
+.latlong-filter {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.latlong-filter input {
+  width: 120px;
+}
+
+/* Button Styles for the sidebar and main page */
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 20px;
+  font-size: 16px;
+}
+
+/* Pagination buttons */
+.pagination button {
+  padding: 10px 15px;
+  margin: 0 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s ease;
+}
+
+.pagination button:hover {
+  background-color: #0056b3;
+}
+
+.pagination button:disabled {
+  background-color: #d6d6d6;
+  cursor: not-allowed;
+}
+
+/* Page info text */
+.pagination span {
+  font-size: 14px;
+  color: #333;
+}
+
+/* Optional: Make the buttons a bit more prominent */
+.pagination button:active {
+  background-color: #004085;
+}
+
+.delete-confirm-button {
+  background-color: #dc3545;
+  margin: 5px;
+}
+
+.delete-deny-button {
+  background-color: #0056b3;
+  margin: 5px;
+}
+
+.horizontal-flex {
+  display: flex;
+  flex-direction: row; /* optional, default is row */
+  gap: 1rem; /* space between items */
+  align-items: center; /* align vertically */ 
+}
+
