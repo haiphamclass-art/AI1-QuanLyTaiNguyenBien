@@ -61,7 +61,7 @@ class ModelLoader:
         if file_size == 0:
             return False, f"File is empty: {path}"
 
-        if file_size > 500 * 1024 * 1024:
+        if file_size > 2 * 1024 * 1024 * 1024:
             return False, f"File too large ({file_size / (1024 * 1024):.2f} MB): {path}"
 
         try:
@@ -102,7 +102,12 @@ class ModelLoader:
                 with open(path, "rb") as file:
                     model = joblib.load(file)
 
-                if not hasattr(model, "predict"):
+                is_stack_model = (
+                    isinstance(model, dict)
+                    and isinstance(model.get("base_models"), dict)
+                    and isinstance(model.get("base_names"), list)
+                )
+                if not hasattr(model, "predict") and not is_stack_model:
                     return False, "Model does not have 'predict' method", None
 
                 print(f"[OK] Model '{model_name}' loaded successfully")

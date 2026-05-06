@@ -1,4 +1,5 @@
 # /project_flask_api/run.py
+import os
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -24,4 +25,5 @@ else:
 if __name__ == '__main__':
     # Chạy ứng dụng
     # host='0.0.0.0' để có thể truy cập từ bên ngoài
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    debug = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+    app.run(debug=debug, use_reloader=False, host='0.0.0.0', port=5001)

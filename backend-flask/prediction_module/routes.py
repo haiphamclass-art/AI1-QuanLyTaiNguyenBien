@@ -37,9 +37,10 @@ def handle_prediction(species):
         )
 
         # Tạo response hoàn chỉnh
+        required_fields = services.get_required_fields(species)
         response_data = {
             "prediction_result": prediction_result,
-            "final_features_used": {k: round(v, 2) if isinstance(v, float) else v for k, v in final_features.items() if k in services.REQUIRED_FIELDS}
+            "final_features_used": {k: round(v, 2) if isinstance(v, float) else v for k, v in final_features.items() if k in required_fields}
         }
         
         return jsonify(response_data), status_code

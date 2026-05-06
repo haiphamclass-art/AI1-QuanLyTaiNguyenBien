@@ -6,6 +6,7 @@ module.exports = (boss) => {
     const logger = require('../config/logger');
     const { Area, Province, Job } = require('../models');
     const proj4 = require('proj4');
+    const { ALL_INPUT_FIELDS } = require('../config/predictionFeatures');
 
     // Logger helper with job context
     const jobLogger = {
@@ -657,8 +658,7 @@ module.exports = (boss) => {
             ];
 
             // Add indicator columns with units
-            const indicators = ['R_PO4', 'O2Sat', 'O2ml_L', 'STheta', 'Salnty', 'R_DYNHT', 'T_degC',
-                'R_Depth', 'Distance', 'Wind_Spd', 'Wave_Ht', 'Wave_Prd', 'IntChl', 'Dry_T'];
+            const indicators = ALL_INPUT_FIELDS;
             indicators.forEach(indicator => {
                 const unit = unitMap.get(indicator);
                 const headerText = unit ? `${indicator} (${unit})` : indicator;
@@ -858,5 +858,4 @@ module.exports = (boss) => {
 
     jobLogger.info('Job workers registered', { jobs: ['csv-import', 'xlsx-import', 'area-xlsx-import', 'prediction-export'] });
 };
-
 

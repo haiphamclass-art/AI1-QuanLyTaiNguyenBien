@@ -9,7 +9,12 @@ import copernicusmarine
 import xarray as xr
 import gsw
 
-from config import REQUIRED_FIELDS,DEFAULT_FALLBACK_VALUES, DATA_CACHE_PATH
+from config import (
+    REQUIRED_FIELDS,
+    DEFAULT_FALLBACK_VALUES,
+    DATA_CACHE_PATH,
+    PREDICTION_FIELDS_BY_SPECIES,
+)
 from .data_fetcher import run_daily_grid_retrieval
 from .model_loader import model_loader
 
@@ -293,8 +298,99 @@ import gsw
 from datetime import datetime
 
 # ... (các hàm và biến không liên quan giữ nguyên) ...
-from config import REQUIRED_FIELDS, DEFAULT_FALLBACK_VALUES, DATA_CACHE_PATH
+from config import REQUIRED_FIELDS, DEFAULT_FALLBACK_VALUES, DATA_CACHE_PATH, PREDICTION_FIELDS_BY_SPECIES
 
+
+def get_required_fields(species):
+    return PREDICTION_FIELDS_BY_SPECIES.get(species, REQUIRED_FIELDS)
+
+
+def _get_model_feature_count(model):
+    if isinstance(model, dict):
+        core_features = model.get('core_features')
+        if isinstance(core_features, list):
+            return len(core_features)
+        base_models = model.get('base_models') or {}
+        for base_model in base_models.values():
+            count = getattr(base_model, 'n_features_in_', None)
+            if count is not None:
+                return int(count)
+        return None
+    count = getattr(model, 'n_features_in_', None)
+    return int(count) if count is not None else None
+
+
+def _predict_with_model(model, input_array):
+    if not isinstance(model, dict):
+        return model.predict(input_array)
+
+    base_names = model.get('base_names') or list((model.get('base_models') or {}).keys())
+    base_models = model.get('base_models') or {}
+    if not base_names or not base_models:
+        raise ValueError("Stack model is missing base models")
+
+    base_predictions = []
+    for name in base_names:
+        base_model = base_models.get(name)
+        if base_model is None:
+            raise ValueError(f"Stack model is missing base model '{name}'")
+        pred = base_model.predict(input_array)
+        base_predictions.append(float(np.ravel(pred)[0]))
+
+    meta_input = np.array(base_predictions).reshape(1, -1)
+    meta_models = model.get('meta_models') or {}
+    blend_weights = model.get('blend_weights') or {}
+
+    if not meta_models:
+        return np.array([float(np.mean(base_predictions))])
+
+    weighted_predictions = []
+    weights = []
+    for name, meta_model in meta_models.items():
+        pred = meta_model.predict(meta_input)
+        weighted_predictions.append(float(np.ravel(pred)[0]))
+        weights.append(float(blend_weights.get(name, 1.0)))
+
+    weight_sum = sum(weights)
+    if weight_sum <= 0:
+        return np.array([float(np.mean(weighted_predictions))])
+
+    final_prediction = sum(pred * weight for pred, weight in zip(weighted_predictions, weights)) / weight_sum
+    return np.array([final_prediction])
+
+
+def _has_class_labels(model):
+    if not isinstance(model, dict):
+        return getattr(model, 'classes_', None) is not None
+
+    for nested_model in (model.get('base_models') or {}).values():
+        if getattr(nested_model, 'classes_', None) is not None:
+            return True
+    for nested_model in (model.get('meta_models') or {}).values():
+        if getattr(nested_model, 'classes_', None) is not None:
+            return True
+    return False
+
+
+def _score_to_prediction_label(score):
+    if score >= 0.75:
+        return 1
+    if score >= 0.25:
+        return 0
+    return -1
+
+
+def _prediction_to_label(model, prediction_value):
+    raw_value = float(np.ravel(prediction_value)[0])
+    if not np.isfinite(raw_value):
+        raise ValueError(f"Model returned a non-finite prediction: {raw_value}")
+
+    # The new .pkl files are regressors trained on score_overall in the 0..1 range.
+    # Convert that score to the 3 output labels instead of rounding to 0/1.
+    if not _has_class_labels(model):
+        return _score_to_prediction_label(raw_value), raw_value
+
+    return int(round(raw_value)), raw_value
 # Helper: find nearest non-NaN value for a variable around a target lat/lon
 def _find_nearest_valid_value(ds: xr.Dataset, var_name: str, lat: float, lon: float):
     if var_name not in ds:
@@ -365,9 +461,10 @@ def process_prediction_request(user_data, species, credentials):
     """
     final_features = {}
     api_call_triggered = False # Đổi tên biến để rõ nghĩa hơn
+    required_fields = get_required_fields(species)
 
     # Bước 1: Kiểm tra xem người dùng đã cung cấp đủ dữ liệu chưa
-    is_user_data_complete = set(REQUIRED_FIELDS).issubset(user_data.keys())
+    is_user_data_complete = set(required_fields).issubset(user_data.keys())
 
     if is_user_data_complete:
         print("User provided all required features. Skipping cache.")
@@ -454,14 +551,14 @@ def process_prediction_request(user_data, species, credentials):
     default_model = f"{species}_stack"
     model_name = model_name_from_req or default_model
     final_input_dict = {}
-    for field in REQUIRED_FIELDS:
+    for field in required_fields:
         value = final_features.get(field)
         if value is None or (isinstance(value, (float, int)) and not np.isfinite(value)):
             fallback_value = DEFAULT_FALLBACK_VALUES.get(field, 0)
             final_input_dict[field] = fallback_value
         else:
             final_input_dict[field] = value
-    prediction_input_list = [final_input_dict[field] for field in REQUIRED_FIELDS]
+    prediction_input_list = [final_input_dict[field] for field in required_fields]
     
     # Use thread-safe model retrieval
     model = model_loader.get_model(model_name)
@@ -483,12 +580,25 @@ def process_prediction_request(user_data, species, credentials):
         }, 500, final_features
     
     input_array = np.array(prediction_input_list).reshape(1, -1)
-    prediction_val = model.predict(input_array)
-    rounded_prediction = round(prediction_val[0])
+    expected_count = _get_model_feature_count(model)
+    if expected_count is not None and expected_count != input_array.shape[1]:
+        return {
+            "error": (
+                f"Model '{model_name}' expects {expected_count} features, "
+                f"but request prepared {input_array.shape[1]} features for species '{species}'."
+            ),
+            "expected_features": expected_count,
+            "prepared_features": input_array.shape[1],
+            "fields": required_fields,
+        }, 400, final_features
+
+    prediction_val = _predict_with_model(model, input_array)
+    prediction_label, raw_prediction = _prediction_to_label(model, prediction_val)
     result = {
         "model_used": model_name, 
-        "prediction": rounded_prediction,
+        "prediction": prediction_label,
+        "prediction_score": raw_prediction,
         "background_fetch_triggered": api_call_triggered
     }
-    debug_features = {key: final_input_dict.get(key) for key in REQUIRED_FIELDS}
+    debug_features = {key: final_input_dict.get(key) for key in required_fields}
     return result, 200, debug_features

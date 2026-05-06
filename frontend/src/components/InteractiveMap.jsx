@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, GeoJSON } from 'react-leaflet';
 import { LatLng } from 'leaflet';
 import L from 'leaflet';
@@ -42,6 +42,7 @@ import {
     QuestionCircleOutlined,
 } from '@ant-design/icons';
 import PredictionBadge from './PredictionBadge';
+import { getPredictionColor, getPredictionLabel as formatPredictionLabel, getPredictionValue } from '../utils/predictionLabels';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -324,15 +325,15 @@ function PredictionCircle({ area, prediction }) {
         if (Number.isNaN(value)) {
             return { result: -2, color: '#1890ff', label: 'Chưa có dự báo' };
         }
-        if (value === 1) return { result: 1, color: '#52c41a', label: 'Tốt' };
-        if (value === 0) return { result: 0, color: '#faad14', label: 'Trung bình' };
-        if (value === -1) return { result: -1, color: '#ff4d4f', label: 'Kém' };
+        if (value === 1) return { result: 1, color: '#52c41a', label: 'Rất phù hợp' };
+        if (value === 0) return { result: 0, color: '#faad14', label: 'Phù hợp' };
+        if (value === -1) return { result: -1, color: '#ff4d4f', label: 'Rất không phù hợp' };
         return { result: -2, color: '#1890ff', label: 'Chưa có dự báo' };
     };
 
     const predictionInfo = getPredictionInfo();
     // area.area is already in hectares, convert to radius (m) for circle display
-    // 1 hectare = 10,000 m²
+    // 1 hectare = 10,000 m2
     const areaInHectares = area.area || 0;
     const circleRadius = areaInHectares > 0 ? Math.sqrt(areaInHectares * 10000 / Math.PI) * 0.1 : 50;
 
@@ -358,22 +359,22 @@ function AreaMarker({ area, prediction, onAreaClick, onViewDetails, selectedArea
     // Get prediction result and color from prediction_text (categorical)
     const getPredictionInfo = () => {
         if (!prediction) {
-            return { result: -2, color: '#1890ff', label: 'Chưa có dự báo' };
+            return { result: -2, color: '#1890ff', label: 'Chưa có dữ liệu dự báo' };
         }
 
         const value = Number.parseInt(prediction.prediction_text, 10);
         if (Number.isNaN(value)) {
-            return { result: -2, color: '#1890ff', label: 'Chưa có dự báo' };
+            return { result: -2, color: '#1890ff', label: 'Chưa có dữ liệu dự báo' };
         }
-        if (value === 1) return { result: 1, color: '#52c41a', label: 'Tốt' };
-        if (value === 0) return { result: 0, color: '#faad14', label: 'Trung bình' };
-        if (value === -1) return { result: -1, color: '#ff4d4f', label: 'Kém' };
-        return { result: -2, color: '#1890ff', label: 'Chưa có dự báo' };
+        if (value === 1) return { result: 1, color: '#52c41a', label: 'Rất phù hợp' };
+        if (value === 0) return { result: 0, color: '#faad14', label: 'Phù hợp' };
+        if (value === -1) return { result: -1, color: '#ff4d4f', label: 'Rất không phù hợp' };
+        return { result: -2, color: '#1890ff', label: 'Chưa có dữ liệu dự báo' };
     };
 
     const predictionInfo = getPredictionInfo();
     // area.area is already in hectares, convert to radius (m) for circle display
-    // 1 hectare = 10,000 m²
+    // 1 hectare = 10,000 m2
     const areaInHectares = area.area || 0;
 
     return (
@@ -449,7 +450,7 @@ function AreaMarker({ area, prediction, onAreaClick, onViewDetails, selectedArea
                                     }}
                                     style={{ width: '100%' }}
                                 >
-                                    Đăng ký email thông báo
+                                    Đăng ký nhận email cập nhật dự báo
                                 </Button>
                             </Space>
                         </Space>
@@ -476,12 +477,12 @@ function StationZoneLegend() {
                 lineHeight: 1.6,
             }}
         >
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>{'Ph\u00e2n v\u00f9ng ch\u1ea5t l\u01b0\u1ee3ng'}</div>
-            <div><span style={{ display: 'inline-block', width: 14, height: 14, background: '#2e7d32', marginRight: 8 }} />{'T\u1ed1t'}</div>
-            <div><span style={{ display: 'inline-block', width: 14, height: 14, background: '#f9a825', marginRight: 8 }} />{'Trung b\u00ecnh'}</div>
-            <div><span style={{ display: 'inline-block', width: 14, height: 14, background: '#c62828', marginRight: 8 }} />{'K\u00e9m'}</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{'Phân vùng chất lượng'}</div>
+            <div><span style={{ display: 'inline-block', width: 14, height: 14, background: '#2e7d32', marginRight: 8 }} />{'Tốt'}</div>
+            <div><span style={{ display: 'inline-block', width: 14, height: 14, background: '#f9a825', marginRight: 8 }} />{'Trung bình'}</div>
+            <div><span style={{ display: 'inline-block', width: 14, height: 14, background: '#c62828', marginRight: 8 }} />{'Kém'}</div>
             <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
-                {'\u0110\u1eadm = g\u1ea7n tr\u1ea1m h\u01a1n, nh\u1ea1t = xa tr\u1ea1m h\u01a1n'}
+                {'Đậm = gần trạm hơn, Nhạt = xa trạm hơn'}
             </div>
         </div>
     );
@@ -512,7 +513,7 @@ function StationZoneTimeControl({
         >
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Biến động diện tích trong 24h</div>
             <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-                {hasHourlyForecast ? `M\u1ed1c \u0111ang xem: ${selectedForecastLabel}` : 'Ch\u01b0a c\u00f3 chu\u1ed7i d\u1ef1 b\u00e1o theo gi\u1edd'}
+                {hasHourlyForecast ? `Mức đang xem: ${selectedForecastLabel}` : 'Chưa có chuỗi dự báo theo giờ cho các trạm này.'}
             </div>
             <Slider
                 min={0}
@@ -848,7 +849,7 @@ const InteractiveMap = () => {
 
         const zoneColor = getZoneColorByPredictionAndRing(prediction, ring);
         const hasPredictionScore = props.prediction_text != null && props.prediction_text !== '';
-        const predictionLabel = hasPredictionScore ? getPredictionLabel(prediction) : 'Ch\u01b0a c\u00f3 d\u1ef1 b\u00e1o';
+        const predictionLabel = hasPredictionScore ? getPredictionLabel(prediction) : 'Chưa có dự báo';
         const predictionColor = getPredictionTextColor(prediction);
         const zoneArea = props.area_km2 != null ? Number(props.area_km2).toFixed(2) : '';
         const scoreBase = hasPredictionScore && props.s0 != null ? Number(props.s0).toFixed(3) : 'N/A';
@@ -887,36 +888,36 @@ const InteractiveMap = () => {
 
         const popupContent = [
             '<div style="padding: 10px 12px; min-width: 320px; max-width: 380px; max-height: 320px; overflow-y: auto; text-align: left; line-height: 1.5;">',
-            '<h2 style="margin: 0 0 8px 0; text-align: left;">Ph\u00e2n v\u00f9ng \u1ea3nh h\u01b0\u1edfng tr\u1ea1m</h2>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>M\u00e3 tr\u1ea1m:</strong> ' + (props.maHieu || '') + '</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>V\u1ecb tr\u00ed:</strong> ' + (props.vitri || '') + '</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>V\u00f2ng \u1ea3nh h\u01b0\u1edfng:</strong> ' + (props.ring || '') + '</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>M\u1ee9c \u1ea3nh h\u01b0\u1edfng:</strong> ' + (props.influence_label || '') + '</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>M\u1ed1c \u0111ang xem:</strong> ' + selectedTimeLabel + '</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>M\u1ee9c tham chi\u1ebfu t\u1eeb d\u1ef1 b\u00e1o tr\u1ea1m:</strong> <span style="color: ' + predictionColor + '; font-weight: 700;">' + predictionLabel + '</span></p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Di\u1ec7n t\u00edch h\u00ecnh h\u1ecdc c\u1ee7a v\u00f9ng t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + zoneArea + ' km2</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Score n\u1ec1n tham chi\u1ebfu theo v\u00f2ng (S0):</strong> ' + scoreBase + '</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Score n\u1ec1n tham chi\u1ebfu \u0111\u01b0\u1ee3c suy ra t\u1eeb prediction c\u1ee7a tr\u1ea1m v\u00e0 tr\u1ecdng s\u1ed1 v\u00f2ng \u1ea3nh h\u01b0\u1edfng. \u0110\u1ed9 s\u00e2u kh\u00f4ng ph\u1ea1t tr\u1ef1c ti\u1ebfp v\u00e0o score n\u00e0y.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>R\u1ee7i ro t\u1ed5ng h\u1ee3p t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedImpactLabel + ' (risk=' + selectedRiskScore + ', F=' + selectedImpactFactor + ')</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">R\u1ee7i ro n\u00e0y \u0111\u01b0\u1ee3c g\u1ed9p theo tr\u1ecdng s\u1ed1 g\u00f3 = 0.4, m\u01b0a = 0.2, s\u00f3ng = 0.4. Impact factor ch\u1ec9 l\u00e0m gi\u1ea3m score, kh\u00f4ng tr\u1ef1c ti\u1ebfp quy\u1ebft \u0111\u1ecbnh h\u00ecnh h\u1ecdc zone.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Gi\u00f3 t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedWind + ' m/s</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>M\u01b0a t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedRain + ' mm</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>S\u00f3ng t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedWave + ' m</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Ba ch\u1ec9 s\u1ed1 n\u00e0y d\u00f9ng \u0111\u1ec3 suy ra risk score theo gi\u1edd, sau \u0111\u00f3 t\u00e1ch ra impact factor cho score v\u00e0 reach factor cho h\u00ecnh h\u1ecdc zone.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>\u0110\u1ed9 s\u00e2u \u0111\u1ea1i di\u1ec7n:</strong> ' + depthValue + ' m</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>H\u1ec7 s\u1ed1 \u0111\u1ed9 s\u00e2u:</strong> ' + depthFactor + '</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Kho\u1ea3ng c\u00e1ch \u0111\u1ebfn \u0111i\u1ec3m depth g\u1ea7n nh\u1ea5t:</strong> ' + depthDistance + ' km</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">\u0110\u1ed9 s\u00e2u ch\u1ec9 tham gia v\u00e0o kh\u1ea3 n\u0103ng lan truy\u1ec1n v\u00e0 h\u00ecnh h\u1ecdc zone, kh\u00f4ng l\u00e0m gi\u1ea3m tr\u1ef1c ti\u1ebfp baseline score c\u1ee7a tr\u1ea1m.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Reach factor t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedReachFactor + '</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Reach factor ch\u1ec9 \u0111i\u1ec1u khi\u1ec3n b\u00e1n k\u00ednh lan truy\u1ec1n `reach_t = R3 * reach_factor_t`, n\u00ean zone s\u1ebd co gi\u00e3n theo gi\u1edd tr\u00ean b\u1ea3n \u0111\u1ed3.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Score t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedScore + '</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">C\u00f4ng th\u1ee9c hi\u1ec7n t\u1ea1i: `S_t = S0 * impact_factor_t`. Impact factor l\u00e0m gi\u1ea3m score, c\u00f2n reach factor l\u00e0m thay \u0111\u1ed5i h\u00ecnh h\u1ecdc zone.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Di\u1ec7n t\u00edch hi\u1ec7u d\u1ee5ng tham chi\u1ebfu:</strong> ' + areaT0 + ' km2</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Di\u1ec7n t\u00edch hi\u1ec7u d\u1ee5ng tham chi\u1ebfu d\u1ef1a tr\u00ean baseline score v\u00e0 h\u00ecnh h\u1ecdc tham chi\u1ebfu c\u1ee7a zone.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Di\u1ec7n t\u00edch hi\u1ec7u d\u1ee5ng t\u1ea1i gi\u1edd \u0111ang xem:</strong> ' + selectedAreaAtHour + ' km2</p>',
-            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">C\u00f4ng th\u1ee9c: `area_t = area_geometry_t * S_t`. V\u00ec v\u1eady gi\u00e1 tr\u1ecb n\u00e0y thay \u0111\u1ed5i theo c\u1ea3 shape zone l\u1eabn score theo gi\u1edd.</p>',
-            '<p style="margin: 4px 0; text-align: left;"><strong>Bi\u1ebfn \u0111\u1ed9ng di\u1ec7n t\u00edch hi\u1ec7u d\u1ee5ng:</strong> ' + selectedDeltaArea + ' km2</p>',
-            '<p style="margin: 0; color: #666; font-size: 12px; text-align: left;">So v\u1edbi m\u1ed1c tham chi\u1ebfu. S\u1ed1 \u00e2m l\u00e0 gi\u1ea3m, s\u1ed1 d\u01b0\u01a1ng l\u00e0 t\u0103ng. N\u1ebfu ch\u01b0a c\u00f3 d\u1ef1 b\u00e1o th\u00ec c\u00e1c gi\u00e1 tr\u1ecb n\u00e0y s\u1ebd l\u00e0 N/A.</p>',
+            '<h2 style="margin: 0 0 8px 0; text-align: left;">Phân vùng ảnh hưởng trạm</h2>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Mã trạm:</strong> ' + (props.maHieu || '') + '</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Vị trí:</strong> ' + (props.vitri || '') + '</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Vòng ảnh hưởng:</strong> ' + (props.ring || '') + '</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Mức ảnh hưởng:</strong> ' + (props.influence_label || '') + '</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Mức đang xem:</strong> ' + selectedTimeLabel + '</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Mức tham chiếu từ dự báo trạm:</strong> <span style="color: ' + predictionColor + '; font-weight: 700;">' + predictionLabel + '</span></p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Diện tích hình học của vùng tại giờ đang xem:</strong> ' + zoneArea + ' km2</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Score nền tham chiếu theo vòng (S0):</strong> ' + scoreBase + '</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Score nền tham chiếu được suy ra từ prediction của trạm và trọng số vòng ảnh hưởng. Độ sâu không ảnh hưởng trực tiếp vào score này.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Rủi ro tổng hợp tại giờ đang xem:</strong> ' + selectedImpactLabel + ' (risk=' + selectedRiskScore + ', F=' + selectedImpactFactor + ')</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Rủi ro này được góp phần theo trọng số gố = 0.4, mưa = 0.2, sóng = 0.4. Impact factor chỉ làm giảm score, không ảnh hưởng trực tiếp đến hình học zone.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Gió tại giờ đang xem:</strong> ' + selectedWind + ' m/s</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Mưa tại giờ đang xem:</strong> ' + selectedRain + ' mm</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Sóng tại giờ đang xem:</strong> ' + selectedWave + ' m</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Ba chỉ số này dùng để suy ra risk score theo giờ, sau đó tách ra impact factor cho score và reach factor cho hình học zone.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Độ sâu đại diện:</strong> ' + depthValue + ' m</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Hệ số độ sâu:</strong> ' + depthFactor + '</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Khoảng cách đến điểm depth gần nhất:</strong> ' + depthDistance + ' km</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Độ sâu chỉ tham gia vào khả năng lan truyền và hình học zone, không làm giảm trực tiếp baseline score của trạm.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Reach factor tại giờ đang xem:</strong> ' + selectedReachFactor + '</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Reach factor chỉ điều khiển bán kính lan truyền `reach_t = R3 * reach_factor_t`, nên zone sẽ co giãn theo giờ trên bản đồ.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Score tại giờ đang xem:</strong> ' + selectedScore + '</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Công thức hiện tại: `S_t = S0 * impact_factor_t`. Impact factor làm giảm score, còn reach factor làm thay đổi hình học zone.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Diện tích hiệu dụng tham chiếu:</strong> ' + areaT0 + ' km2</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Diện tích hiệu dụng tham chiếu dựa trên baseline score và hình học tham chiếu của zone.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Diện tích hiệu dụng tại giờ đang xem:</strong> ' + selectedAreaAtHour + ' km2</p>',
+            '<p style="margin: 0 0 6px 0; color: #666; font-size: 12px; text-align: left;">Công thức: `area_t = area_geometry_t * S_t`. Vì vậy giá trị này thay đổi theo cả shape zone lẫn score theo giờ.</p>',
+            '<p style="margin: 4px 0; text-align: left;"><strong>Biến động diện tích hiệu dụng:</strong> ' + selectedDeltaArea + ' km2</p>',
+            '<p style="margin: 0; color: #666; font-size: 12px; text-align: left;">So với mức tham chiếu. Số âm là giảm, số dương là tăng. Nếu chưa có dự báo thì các giá trị này sẽ là N/A.</p>',
             '</div>',
         ].join('');
 
@@ -953,9 +954,9 @@ const InteractiveMap = () => {
     const getPredictionLabel = (prediction) => {
         const value = Number.parseInt(prediction?.prediction_text, 10);
 
-        if (value === 1) return 'Tốt';
-        if (value === 0) return 'Trung bình';
-        if (value === -1) return 'Kém';
+        if (value === 1) return 'Rất phù hợp';
+        if (value === 0) return 'Phù hợp';
+        if (value === -1) return 'Rất không phù hợp';
         return 'Chưa có dự báo';
     };
 
@@ -1434,7 +1435,7 @@ const InteractiveMap = () => {
     return (
         <div className="map-with-sidebar-container">
             {isSidebarCollapsed && (
-                <Tooltip placement="right" title={t('common.showSidebar') || 'Mở thanh bên'}>
+                <Tooltip placement="right" title={t('common.showSidebar') || 'Hiển thị thanh bên'}>
                     <div
                         className="sidebar-handle"
                         onClick={() => setIsSidebarCollapsed(false)}
@@ -1631,11 +1632,11 @@ const InteractiveMap = () => {
                                         <div>
                                             <Text strong>{t('detail.location')}: </Text>
                                             <Space size="medium" wrap style={{ width: '100%', marginTop: '4px' }}>
-                                                <Tag color="geekblue">WGS84: Lat {Number(selectedArea.latitude).toFixed(6)}°, Lon {Number(selectedArea.longitude).toFixed(6)}°</Tag>
+                                                <Tag color="geekblue">WGS84: Lat {Number(selectedArea.latitude).toFixed(6)}Â°, Lon {Number(selectedArea.longitude).toFixed(6)}Â°</Tag>
                                                 {(() => {
                                                     const res = convertWGS84ToVN2000(selectedArea.latitude, selectedArea.longitude);
                                                     if (!res) return null;
-                                                    return <Tag color="purple">VN2000: X (E) {Math.round(res.x)} m, Y (N) {Math.round(res.y)} m (zone {res.zone}°)</Tag>;
+                                                    return <Tag color="purple">VN2000: X (E) {Math.round(res.x)} m, Y (N) {Math.round(res.y)} m (zone {res.zone}Â°)</Tag>;
                                                 })()}
                                             </Space>
                                         </div>
@@ -1691,7 +1692,7 @@ const InteractiveMap = () => {
                                                     type="default"
                                                     block
                                                 >
-                                                    {t('common.subscribeEmail')}
+                                                    {t('common.subscribeEmail') || 'Đăng ký nhận email'}
                                                 </Button>
                                             </Space>
                                         </div>
@@ -1970,3 +1971,4 @@ const InteractiveMap = () => {
 };
 
 export default InteractiveMap;
+

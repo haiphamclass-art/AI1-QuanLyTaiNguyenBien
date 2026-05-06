@@ -8,6 +8,7 @@
 const { MLModel, NatureElement, ModelNatureElement } = require('../src/models');
 const sequelize = require('../src/config/db');
 const logger = require('../src/config/logger');
+const { getInputFields } = require('../src/config/predictionFeatures');
 
 // ML Models configuration from Flask
 const ML_MODELS = [
@@ -128,24 +129,10 @@ const ML_MODELS = [
   },
 ];
 
-// Nature Elements expected names (must match database)
-// These should already exist in diagnose_naturalelements table
-const REQUIRED_NATURE_ELEMENTS = [
-  'R_PO4',      // Phosphate
-  'O2Sat',      // Oxygen Saturation
-  'O2ml_L',     // Dissolved Oxygen
-  'STheta',     // Seawater Density
-  'Salnty',     // Salinity
-  'R_DYNHT',    // Dynamic Height
-  'T_degC',     // Temperature
-  'R_Depth',    // Depth
-  'Distance',   // Distance
-  'Wind_Spd',   // Wind Speed
-  'Wave_Ht',    // Wave Height
-  'Wave_Prd',   // Wave Period
-  'IntChl',     // Integrated Chlorophyll
-  'Dry_T',      // Dry Temperature
-];
+const REQUIRED_NATURE_ELEMENTS = [...new Set([
+  ...getInputFields('cobia'),
+  ...getInputFields('oyster'),
+])];
 
 async function seedMLModels() {
   try {
@@ -206,8 +193,13 @@ async function seedMLModels() {
           transaction,
         });
 
-        // Create new associations with input order
-        const associations = natureElements.map((element, index) => ({
+        const fieldOrder = getInputFields(model.area_type);
+        const elementsForModel = fieldOrder
+          .map((name) => natureElements.find((element) => element.name === name))
+          .filter(Boolean);
+
+        // Create new associations with species-specific input order.
+        const associations = elementsForModel.map((element, index) => ({
           model_id: model.id,
           nature_element_id: element.id,
           is_required: true, // All elements are required for these models
@@ -260,4 +252,3 @@ if (require.main === module) {
 }
 
 module.exports = { seedMLModels };
-

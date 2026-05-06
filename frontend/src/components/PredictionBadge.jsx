@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { getPredictionLabel, getPredictionTagColor } from '../utils/predictionLabels';
 
 const PredictionBadge = ({ prediction, size = 'default' }) => {
     const { t } = useTranslation();
@@ -13,22 +14,8 @@ const PredictionBadge = ({ prediction, size = 'default' }) => {
         );
     }
 
-    const value = Number.parseInt(prediction.prediction_text, 10);
-    let color, label;
-
-    if (value === 1) {
-        color = 'green';
-        label = t('detail.good');
-    } else if (value === 0) {
-        color = 'orange';
-        label = t('detail.average');
-    } else if (value === -1) {
-        color = 'red';
-        label = t('detail.poor');
-    } else {
-        color = 'blue';
-        label = t('detail.noPrediction');
-    }
+    const color = getPredictionTagColor(prediction);
+    const label = getPredictionLabel(prediction, t('detail.noPrediction'));
 
     return (
         <Tag color={color} size={size}>

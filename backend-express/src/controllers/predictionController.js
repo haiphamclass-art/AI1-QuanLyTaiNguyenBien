@@ -17,12 +17,14 @@ const xlsx = require('xlsx');
 const { parseExcel2 } = require('../services/importService');
 const logger = require('../config/logger');
 const path = require('path');
-
-// Required fields for prediction model - only these should be saved to database
-const REQUIRED_FIELDS = [
-  'R_PO4', 'O2Sat', 'O2ml_L', 'STheta', 'Salnty', 'R_DYNHT', 'T_degC',
-  'R_Depth', 'Distance', 'Wind_Spd', 'Wave_Ht', 'Wave_Prd', 'IntChl', 'Dry_T'
-];
+const {
+  ALL_INPUT_FIELDS,
+  FIELD_METADATA,
+  getInputFields,
+  getModelFields,
+  normalizeFeatureName,
+  norm,
+} = require('../config/predictionFeatures');
 
 const FLASK_BASE_URL =
   process.env.FLASK_BASE_URL ||
@@ -125,6 +127,78 @@ function getFlaskModelKey(model) {
   return null;
 }
 
+function isCreatedAtFieldName(key) {
+  const normalized = norm(key);
+  return /^(createdat|created at|created date|date|ngay|ngay tao|thoi gian)$/.test(normalized);
+}
+
+function parsePredictionCreatedAt(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value > 25569 && value < 100000) {
+      // Excel serial date.
+      return new Date(Math.round((value - 25569) * 86400 * 1000));
+    }
+    if (value > 100000000000) {
+      return new Date(value);
+    }
+    if (value > 1000000000) {
+      return new Date(value * 1000);
+    }
+    return null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const dmyMatch = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (dmyMatch) {
+    const [, day, month, year, hour = '0', minute = '0', second = '0'] = dmyMatch;
+    const parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    );
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const numericValue = Number(raw);
+  if (Number.isFinite(numericValue)) {
+    return parsePredictionCreatedAt(numericValue);
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function extractCreatedAt(rawInputs) {
+  if (!rawInputs || typeof rawInputs !== 'object') {
+    return { createdAt: null, inputs: rawInputs || {} };
+  }
+
+  const inputs = { ...rawInputs };
+  let createdAt = null;
+  for (const key of Object.keys(inputs)) {
+    if (isCreatedAtFieldName(key)) {
+      if (createdAt === null) {
+        createdAt = inputs[key];
+      }
+      delete inputs[key];
+    }
+  }
+  return { createdAt, inputs };
+}
+
 // Helper function to create prediction without Express req/res
 async function createPredictionInternal(userId, areaId, inputs, modelName, createdAt = null) {
   const area = await Area.findByPk(areaId);
@@ -170,6 +244,9 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
 
   // If mapping fails, let Flask fall back to the default model for the species.
   const actualModelName = flaskModelKey || null;
+  const modelAreaType = (model.area_type || area.area_type || '').toLowerCase();
+  const inputFields = getInputFields(modelAreaType);
+  const modelFields = getModelFields(modelAreaType);
 
   // Build fallback map: elementName -> fallback_value (prioritize model-specific, then global)
   const fallbackMap = {};
@@ -189,26 +266,32 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
 
   logger.debug(`[Prediction] Fallback map for model ${modelName}:`, fallbackMap);
 
-  // Filter inputs to only include required fields for the model
+  // Normalize and keep the fields configured for this species. Oyster has a
+  // wider input form than the current .pkl feature vector; extra fields are
+  // saved with the prediction but not sent to Flask.
   const filteredInputs = {};
   const skippedFields = [];
   const appliedFallbacks = [];
 
   for (const [key, value] of Object.entries(inputs || {})) {
-    if (REQUIRED_FIELDS.includes(key)) {
-      filteredInputs[key] = Number.parseFloat(value);
+    const featureName = normalizeFeatureName(key, modelAreaType);
+    if (featureName && inputFields.includes(featureName)) {
+      filteredInputs[featureName] = Number.parseFloat(value);
     } else {
       skippedFields.push(key);
     }
   }
 
-  // Apply fallback values for missing required fields
+  // Apply fallback values only for fields that the .pkl model actually needs.
   const missingFields = [];
-  REQUIRED_FIELDS.forEach(field => {
+  modelFields.forEach(field => {
     if (filteredInputs[field] == null || isNaN(filteredInputs[field])) {
       if (fallbackMap[field] !== undefined) {
         filteredInputs[field] = fallbackMap[field];
         appliedFallbacks.push(`${field}=${fallbackMap[field]}`);
+      } else if (FIELD_METADATA[field]?.fallback_value !== undefined) {
+        filteredInputs[field] = FIELD_METADATA[field].fallback_value;
+        appliedFallbacks.push(`${field}=${FIELD_METADATA[field].fallback_value}`);
       } else {
         missingFields.push(field);
       }
@@ -235,9 +318,9 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
     }
   }
 
-  // Prepare request data for Flask API - only include REQUIRED_FIELDS + lat/lon
+  // Prepare request data for Flask API - only include model feature fields + lat/lon
   const flaskRequestData = {};
-  REQUIRED_FIELDS.forEach(field => {
+  modelFields.forEach(field => {
     if (filteredInputs[field] != null) {
       flaskRequestData[field] = filteredInputs[field];
     }
@@ -267,6 +350,7 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
       lon: flaskRequestData.lon,
       fieldsCount: Object.keys(flaskRequestData).filter(k => !['lat', 'lon', 'model'].includes(k)).length,
       fields: Object.keys(flaskRequestData).filter(k => !['lat', 'lon', 'model'].includes(k)),
+      expectedFields: modelFields,
     }
   });
   logger.debug('[Flask Request] Full request data', {
@@ -318,11 +402,13 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
     prediction_text: prediction_result.prediction,
   };
 
-  if (createdAt && !isNaN(new Date(createdAt).getTime())) {
-    const customDate = new Date(createdAt);
+  const customDate = parsePredictionCreatedAt(createdAt);
+  if (customDate) {
     predictionData.createdAt = customDate;
     predictionData.updatedAt = customDate;
     logger.debug('[Prediction] Using custom createdAt', { createdAt: customDate });
+  } else if (createdAt !== null && createdAt !== undefined && createdAt !== '') {
+    logger.warn('[Prediction] Ignored invalid createdAt value', { createdAt });
   }
 
   const predictionRecord = await Prediction.create(predictionData);
@@ -837,9 +923,7 @@ exports.createBatchPrediction = async (req, res) => {
     const batchResults = [];
     for (let index = 0; index < data.length; index += 1) {
       const rawInputs = data[index] || {};
-      const createdAt = rawInputs.createdAt || null;
-      const inputs = { ...rawInputs };
-      delete inputs.createdAt;
+      const { createdAt, inputs } = extractCreatedAt(rawInputs);
 
       try {
         const result = await createPredictionInternal(userId, areaId, inputs, modelName, createdAt);
@@ -1067,21 +1151,13 @@ exports.createBatchPredictionFromExcel = async (req, res) => {
       return res.status(400).json({ error: 'Sheet is empty' });
     }
 
-    const required = ['R_PO4', 'O2Sat', 'O2ml_L', 'STheta', 'Salnty', 'R_DYNHT', 'T_degC', 'R_Depth', 'Distance', 'Wind_Spd', 'Wave_Ht', 'Wave_Prd', 'IntChl', 'Dry_T'];
-    const norm = (s) => (s || '').toString().toLowerCase()
-      .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-      .replace(/[^a-z0-9]+/g, ' ').trim();
-    const mapHeaderToFeature = (h) => {
-      const n = norm(h);
-      if (/oxy.*hoa.*tan|dissolved.*oxygen|o2\b/.test(n)) return 'O2ml_L';
-      if (/nhiet.*do.*nuoc.*bien|nhiet.*do(?!\s*khong)|temperature/.test(n)) return 'T_degC';
-      if (/do.*man|salinity/.test(n)) return 'Salnty';
-      if (/wave.*height|vhm0|chieu.*cao/.test(n)) return 'Wave_Ht';
-      if (/wave.*period|vtpk|chu.*ky/.test(n)) return 'Wave_Prd';
-      if (/chlor|chl/.test(n)) return 'IntChl';
-      if (/po4|photphat|phosphate/.test(n)) return 'R_PO4';
-      return null;
-    };
+    const modelWhere = typeof modelName === 'number' || !isNaN(parseInt(modelName, 10))
+      ? { id: parseInt(modelName, 10) }
+      : { name: modelName };
+    const selectedModel = await MLModel.findOne({ where: modelWhere, attributes: ['id', 'area_type'] });
+    const selectedArea = selectedModel?.area_type ? null : await Area.findByPk(areaId, { attributes: ['area_type'] });
+    const excelAreaType = (selectedModel?.area_type || selectedArea?.area_type || '').toLowerCase();
+    const mapHeaderToFeature = (h) => normalizeFeatureName(h, excelAreaType);
 
     let normalized = [];
     // Try wide format mapping
@@ -1096,10 +1172,6 @@ exports.createBatchPredictionFromExcel = async (req, res) => {
             const feat = headerMap[h];
             if (!feat) continue;
             let num = v === '' || v === null || v === undefined ? null : Number(v);
-            if (feat === 'O2ml_L') {
-              const unitHint = norm(h);
-              if (/mg\s*\/\s*l/.test(unitHint)) num = num != null ? num / 1.429 : null;
-            }
             if (num !== null && !isNaN(num)) obj[feat] = num;
           }
           const createdAtKey = Object.keys(r).find(k => /created|date|ngay|thoi gian/.test(norm(k)));
@@ -1148,26 +1220,17 @@ exports.createBatchPredictionFromExcel = async (req, res) => {
         for (let c = startCol; c < widest; c++) monthCols.push({ col: c, createdAt: null });
       }
       logger.info('[Excel] headerRow:', { headerRow: headerRow + 1, monthColsCount: monthCols.length });
-      // Hard-code only 4 needed features by absolute row index:
-      // Row numbers are 1-based visually; here we use 0-based indices.
-      const rowIndexByFeature = {
-        O2ml_L: 5,   // row 6: Ôxy hoà tan (DO)
-        T_degC: 6,   // row 7: Nhiệt độ nước biển
-        Salnty: 8,   // row 9: Độ mặn
-        Dry_T: 13,   // row 14: Nhiệt độ không khí
-      };
       const collected = monthCols.map(mc => ({ createdAt: mc.createdAt }));
-      for (const [feat, r] of Object.entries(rowIndexByFeature)) {
+      for (let r = startRow; r < rowsMatrix.length; r++) {
         const row = rowsMatrix[r] || [];
+        const feat = mapHeaderToFeature(row[nameCol]);
+        if (!feat) continue;
         const unitText = row[unitCol] ? norm(row[unitCol]) : '';
         logger.info(`[Excel] row ${r + 1}: feat=${feat} unit='${unitText}' values@cols=${monthCols.map(m => m.col).join(',')}`);
         for (let i = 0; i < monthCols.length; i++) {
           const { col } = monthCols[i];
           const raw = row[col];
           let num = raw === '' || raw === null || raw === undefined ? null : Number(raw);
-          if (feat === 'O2ml_L' && num != null) {
-            if (/mg\s*\/\s*l/.test(unitText)) num = num / 1.429;
-          }
           if (num !== null && !isNaN(num)) collected[i][feat] = num;
         }
       }
@@ -1203,7 +1266,11 @@ exports.createBatchPredictionFromExcel2 = async (req, res) => {
     if (!modelName) return res.status(400).json({ error: 'modelName is required' });
 
     logger.info('[Excel2] Processing with modelName:', { modelName, userId });
-    const parsed = await parseExcel2(req.file.buffer);
+    const modelWhere = typeof modelName === 'number' || !isNaN(parseInt(modelName, 10))
+      ? { id: parseInt(modelName, 10) }
+      : { name: modelName };
+    const selectedModel = await MLModel.findOne({ where: modelWhere, attributes: ['id', 'area_type'] });
+    const parsed = await parseExcel2(req.file.buffer, selectedModel?.area_type);
     logger.info('[Excel2] Parsed rows:', { count: parsed.length });
 
     // Process rows sequentially (one by one) instead of parallel
@@ -2514,8 +2581,7 @@ exports.exportPredictionsToExcel = async (req, res) => {
     ];
 
     // Add environment indicator columns
-    const indicators = ['R_PO4', 'O2Sat', 'O2ml_L', 'STheta', 'Salnty', 'R_DYNHT', 'T_degC',
-      'R_Depth', 'Distance', 'Wind_Spd', 'Wave_Ht', 'Wave_Prd', 'IntChl', 'Dry_T'];
+    const indicators = ALL_INPUT_FIELDS;
 
     indicators.forEach(indicator => {
       columns.push({
@@ -2711,20 +2777,10 @@ exports.exportPredictionsToExcel = async (req, res) => {
     const indicatorNotes = [
       ['', ''],
       ['Chỉ số', 'Mô tả'],
-      ['R_PO4', 'Phosphate (µmol/L)'],
-      ['O2Sat', 'Độ bão hòa oxy (%)'],
-      ['O2ml_L', 'Oxy hoà tan (ml/L)'],
-      ['STheta', 'Mật độ tiềm năng nước biển (kg/m³)'],
-      ['Salnty', 'Độ mặn (PSU)'],
-      ['R_DYNHT', 'Độ cao động lực (m)'],
-      ['T_degC', 'Nhiệt độ nước biển (°C)'],
-      ['R_Depth', 'Độ sâu (m)'],
-      ['Distance', 'Khoảng cách (km)'],
-      ['Wind_Spd', 'Tốc độ gió (m/s)'],
-      ['Wave_Ht', 'Chiều cao sóng (m)'],
-      ['Wave_Prd', 'Chu kỳ sóng (s)'],
-      ['IntChl', 'Chlorophyll tích hợp (mg/m²)'],
-      ['Dry_T', 'Nhiệt độ không khí (°C)'],
+      ...ALL_INPUT_FIELDS.map((field) => [
+        field,
+        `${FIELD_METADATA[field]?.category || 'Water Quality'}${FIELD_METADATA[field]?.unit ? ` (${FIELD_METADATA[field].unit})` : ''}`,
+      ]),
     ];
 
     indicatorNotes.forEach((row, index) => {

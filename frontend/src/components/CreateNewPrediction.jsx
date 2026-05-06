@@ -17,8 +17,57 @@ import {
 } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getPredictionFieldElements } from '../data/predictionFeatures';
 const { Option } = Select;
 const { Title } = Typography;
+
+const normalizeAreaType = (value) => {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (normalized === 'cobia' || normalized.includes('cá') || normalized.includes('ca')) {
+    return 'cobia';
+  }
+  if (normalized === 'oyster' || normalized.includes('hàu') || normalized.includes('hau')) {
+    return 'oyster';
+  }
+  return normalized;
+};
+
+const getAreaTypeLabel = (value) => {
+  const areaType = normalizeAreaType(value);
+  if (areaType === 'cobia') return 'Cá giò';
+  if (areaType === 'oyster') return 'Hàu';
+  return value || 'Không rõ';
+};
+
+const normalizeCsvHeader = (header) => {
+  const rawHeader = (header || '').toString().trim();
+  const normalized = rawHeader
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+  if (/^(createdat|created at|created date|date|ngay|ngay tao|thoi gian)$/.test(normalized)) {
+    return 'createdAt';
+  }
+
+  return rawHeader;
+};
+
+const parseCsvCell = (header, value) => {
+  const rawValue = (value || '').toString().trim();
+  if (header === 'createdAt') {
+    return rawValue;
+  }
+  if (!rawValue) {
+    return null;
+  }
+
+  const numericValue = Number(rawValue.replace(',', '.'));
+  return Number.isFinite(numericValue) ? numericValue : rawValue;
+};
 
 const getApiErrorMessage = (error, fallbackMessage) => {
   return (
@@ -57,18 +106,16 @@ const CreateNewPrediction = () => {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await axios.get('/api/express/ml-models', {
+        const response = await axios.get('/api/express/ml-models/public', {
           params: { is_active: true }
         });
         const models = response.data.data || [];
         
-        // Only include models that have files (model_file_path is not null)
         const modelsWithFiles = models
-          .filter(model => model.model_file_path || model.google_drive_download_link)
           .map(model => ({
             value: model.id,
             label: model.name,
-            type: model.area_type,
+            type: normalizeAreaType(model.area_type),
             path: model.model_file_path,
             natureElements: model.natureElements || [],
           }));
@@ -88,13 +135,15 @@ const CreateNewPrediction = () => {
     if (model) {
       setSelectedModel(model);
       
-      // Sort nature elements by input_order
-      const sortedElements = (model.natureElements || [])
-        .sort((a, b) => {
-          const orderA = a.ModelNatureElement?.input_order ?? 0;
-          const orderB = b.ModelNatureElement?.input_order ?? 0;
-          return orderA - orderB;
-        });
+      const configuredElements = getPredictionFieldElements(model.type);
+      const sortedElements = configuredElements.length > 0
+        ? configuredElements
+        : (model.natureElements || [])
+          .sort((a, b) => {
+            const orderA = a.ModelNatureElement?.input_order ?? 0;
+            const orderB = b.ModelNatureElement?.input_order ?? 0;
+            return orderA - orderB;
+          });
       
       setModelElements(sortedElements);
       
@@ -148,7 +197,7 @@ const CreateNewPrediction = () => {
 
           // Verify area belongs to user's region
           setSelectedAreaId(areaData.id);
-          setAreaType(areaData.area_type || '');
+          setAreaType(normalizeAreaType(areaData.area_type));
           singleForm.setFieldsValue({ areaId: areaData.id });
         } catch (error) {
           console.error('Error fetching area:', error);
@@ -202,12 +251,12 @@ const CreateNewPrediction = () => {
         throw new Error('You need to select area and model');
 
       setBatchProgress(20);
-      const headers = csvElements[0].split(',');
+      const headers = csvElements[0].split(',').map(normalizeCsvHeader);
       const data = csvElements.slice(1).map((line) => {
         const parts = line.split(',');
         const obj = {};
         for (let i = 0; i < headers.length; i++) {
-          obj[headers[i]] = parseFloat(parts[i]);
+          obj[headers[i]] = parseCsvCell(headers[i], parts[i]);
         }
         console.log('data', obj);
 
@@ -328,7 +377,7 @@ const CreateNewPrediction = () => {
   };
 
   const filteredModels = areaType
-    ? allModels.filter((m) => m.type === areaType)
+    ? allModels.filter((m) => normalizeAreaType(m.type) === normalizeAreaType(areaType))
     : [];
 
   return (
@@ -378,13 +427,15 @@ const CreateNewPrediction = () => {
                       onChange={(val) => {
                         setSelectedAreaId(val);
                         const area = areas.find((a) => a.id === +val);
-                        setAreaType(area?.area_type);
+                        setAreaType(normalizeAreaType(area?.area_type));
+                        setSelectedModel(null);
+                        setModelElements([]);
                         singleForm.setFieldsValue({ modelName: undefined });
                       }}
                     >
                       {areas.map((area) => (
                         <Option key={area.id} value={area.id}>
-                          {area.name}
+                          [{getAreaTypeLabel(area.area_type)}] {area.name}
                         </Option>
                       ))}
                     </Select>
@@ -409,7 +460,7 @@ const CreateNewPrediction = () => {
                     >
                       {filteredModels.map((model) => (
                         <Option key={model.value} value={model.value}>
-                          {model.label}
+                          [{getAreaTypeLabel(model.type)}] {model.label}
                         </Option>
                       ))}
                     </Select>
@@ -502,13 +553,15 @@ const CreateNewPrediction = () => {
                       onChange={(val) => {
                         setSelectedAreaId(val);
                         const area = areas.find((a) => a.id === +val);
-                        setAreaType(area?.area_type);
+                        setAreaType(normalizeAreaType(area?.area_type));
+                        setSelectedModel(null);
+                        setModelElements([]);
                         batchForm.setFieldsValue({ modelName: undefined });
                       }}
                     >
                       {areas.map((area) => (
                         <Option key={area.id} value={area.id}>
-                          {area.name}
+                          [{getAreaTypeLabel(area.area_type)}] {area.name}
                         </Option>
                       ))}
                     </Select>
@@ -529,7 +582,7 @@ const CreateNewPrediction = () => {
                     >
                       {filteredModels.map((model) => (
                         <Option key={model.value} value={model.value}>
-                          {model.label}
+                          [{getAreaTypeLabel(model.type)}] {model.label}
                         </Option>
                       ))}
                     </Select>
@@ -600,13 +653,15 @@ const CreateNewPrediction = () => {
                       onChange={(val) => {
                         setSelectedAreaId(val);
                         const area = areas.find((a) => a.id === +val);
-                        setAreaType(area?.area_type);
+                        setAreaType(normalizeAreaType(area?.area_type));
+                        setSelectedModel(null);
+                        setModelElements([]);
                         batchForm.setFieldsValue({ modelName: undefined });
                       }}
                     >
                       {areas.map((area) => (
                         <Option key={area.id} value={area.id}>
-                          {area.name}
+                          [{getAreaTypeLabel(area.area_type)}] {area.name}
                         </Option>
                       ))}
                     </Select>
@@ -624,7 +679,7 @@ const CreateNewPrediction = () => {
                     >
                       {filteredModels.map((model) => (
                         <Option key={model.value} value={model.value}>
-                          {model.label}
+                          [{getAreaTypeLabel(model.type)}] {model.label}
                         </Option>
                       ))}
                     </Select>
@@ -682,7 +737,7 @@ const CreateNewPrediction = () => {
                     >
                       {allModels.map((model) => (
                         <Option key={model.value} value={model.value}>
-                          {model.label}
+                          [{getAreaTypeLabel(model.type)}] {model.label}
                         </Option>
                       ))}
                     </Select>

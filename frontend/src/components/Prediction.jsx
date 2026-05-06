@@ -16,6 +16,7 @@ import {
   WarningOutlined,
   MailOutlined,
 } from '@ant-design/icons';
+import { getPredictionLabel, getPredictionValue } from '../utils/predictionLabels';
 
 const { Title, Text } = Typography;
 
@@ -31,16 +32,16 @@ const Prediction = () => {
     if (!prediction) return {};
     console.log('result', prediction.prediction_text);
 
-    switch (prediction.prediction_text) {
+    switch (getPredictionValue(prediction)) {
       case -1:
         return {
-          text: t('prediction.unsuitable'),
+          text: getPredictionLabel(prediction),
           icon: <WarningOutlined style={{ fontSize: 24, color: '#ff4d4f' }} />,
           color: '#ff4d4f',
         };
       case 1:
         return {
-          text: t('prediction.excellent'),
+          text: getPredictionLabel(prediction),
           icon: (
             <CheckCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} />
           ),
@@ -48,7 +49,7 @@ const Prediction = () => {
         };
       case 0:
         return {
-          text: t('prediction.suitable'),
+          text: getPredictionLabel(prediction),
           icon: (
             <ExclamationCircleOutlined
               style={{ fontSize: 24, color: '#faad14' }}

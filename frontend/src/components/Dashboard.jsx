@@ -27,6 +27,7 @@ import {
 import { ClearOutlined, MailOutlined, EyeOutlined, CloseOutlined, SendOutlined, DownloadOutlined, FilterOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import PredictionBadge from './PredictionBadge';
+import { predictionFilterOptions } from '../utils/predictionLabels';
 
 const { Title } = Typography;
 
@@ -600,11 +601,7 @@ const Dashboard = () => {
                       setSelectedPredictionResult(value);
                       setCurrentPage(0);
                     }}
-                    options={[
-                      { value: 1, label: 'Tốt' },
-                      { value: 0, label: 'Trung bình' },
-                      { value: -1, label: 'Kém' },
-                    ]}
+                    options={predictionFilterOptions}
                   />
                 </Col>
 

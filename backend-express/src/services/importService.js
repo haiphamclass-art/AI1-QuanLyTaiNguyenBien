@@ -4,9 +4,12 @@ const { Op } = require('sequelize');
 const { Sequelize } = require('sequelize');
 const sequelize = require('../config/db');
 const logger = require('../config/logger');
+const { normalizeFeatureName } = require('../config/predictionFeatures');
 
-function normalizeHeader(name) {
+function normalizeHeader(name, areaType = null) {
     if (!name) return '';
+    const configuredName = normalizeFeatureName(name, areaType);
+    if (configuredName) return configuredName;
     const s = String(name).toLowerCase().trim();
     const map = {
         // Map trực tiếp sang CALCOFI khi có thể
@@ -92,7 +95,7 @@ function normalizeAreaName(name) {
     return normalized;
 }
 
-async function parseExcel2(buffer) {
+async function parseExcel2(buffer, areaType = null) {
     const wb = xlsx.read(buffer, { type: 'buffer' });
     const results = [];
 
@@ -117,7 +120,8 @@ async function parseExcel2(buffer) {
         if (!aoa || aoa.length < 4) continue;
         const headerRow = aoa[1]; // row index 1 (Excel row 2) - dòng chứa tên yếu tố
         const rawHeaders = headerRow ? headerRow.map(h => h || '') : [];
-        const headers = headerRow ? headerRow.map(h => normalizeHeader(h)) : [];
+        const sheetAreaType = areaType || (/cobia|ca\s*gio|cá\s*giò/i.test(sheetName) ? 'cobia' : 'oyster');
+        const headers = headerRow ? headerRow.map(h => normalizeHeader(h, sheetAreaType)) : [];
         const COL_NAME = 0; // A
         const COL_TIME = 2; // C (Quý ... Năm ...)
         let currentName = null;
@@ -134,40 +138,7 @@ async function parseExcel2(buffer) {
                 if (!key) continue;
                 const val = parseNumeric(row[c]);
                 if (val == null) continue;
-                if (key === 'DO_mgL') { features.O2ml_L = val / 1.429; continue; }
-                if (key === 'R_PO4') {
-                    const raw = String(rawHeaders[c] || '').toLowerCase();
-                    const isPo4P = /po4\s*-?\s*p|p\s*-?\s*po4/.test(raw) || /po4p/.test(raw);
-                    const molarP = 30.973762;
-                    const molarPO4 = 94.9714;
-                    const umolPerL = isPo4P ? (val * 1000 / molarP) : (val * 1000 / molarPO4);
-                    features.R_PO4 = umolPerL;
-                    continue;
-                }
                 features[key] = val;
-            }
-            // Compute O2Sat if we have T and S and O2ml_L
-            // Only calculate if values are within reasonable ranges
-            if (features.O2ml_L != null && features.T_degC != null && features.Salnty != null) {
-                const temp = Number(features.T_degC);
-                const sal = Number(features.Salnty);
-                const o2 = Number(features.O2ml_L);
-
-                // Validate input ranges
-                if (temp >= 0 && temp <= 40 && sal >= 10 && sal <= 45 && o2 >= 0 && o2 <= 20) {
-                    const cStar = o2SolubilityMlPerL(temp, sal);
-                    if (cStar && isFinite(cStar) && cStar > 0) {
-                        const sat = (o2 / cStar) * 100.0;
-                        // Limit O2Sat to reasonable range: 0-150% (supersaturation can occur but rarely >150%)
-                        if (sat >= 0 && sat <= 150) {
-                            features.O2Sat = sat;
-                        } else {
-                            logger.warn(`[Excel2] O2Sat out of range (${sat.toFixed(2)}%), skipping calculation`);
-                        }
-                    }
-                } else {
-                    logger.warn(`[Excel2] Invalid input ranges for O2Sat calculation: T=${temp}, S=${sal}, O2=${o2}`);
-                }
             }
             // resolve area by name using normalized comparison
             const normalizedCurrentName = normalizeAreaName(currentName);

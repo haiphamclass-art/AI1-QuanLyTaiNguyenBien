@@ -142,28 +142,121 @@ MODEL_PATHS = discover_model_paths()
 # }
 
 DATA_CACHE_PATH = 'data/latest_grid.nc'
-# List of required fields for prediction
-REQUIRED_FIELDS = [
-    'R_PO4','O2Sat','O2ml_L','STheta','Salnty','R_DYNHT','T_degC','R_Depth','Distance',
-    'Wind_Spd','Wave_Ht','Wave_Prd','IntChl','Dry_T'
+
+# Feature order must match the training column order of each .pkl file.
+COBIA_PREDICTION_FIELDS = [
+    'Độ mặn',
+    'Nhiệt độ nước biển',
+    'DO',
+    'pH',
+    'Tổng chất rắn lơ lửng (TSS)',
+    'Amoni (NH4+)',
+    'Phosphat (PO43-)',
+    'Florua (F-)',
+    'Xianua (CN-)',
+    'Asen (As)',
+    'Cadimi (Cd)',
+    'Chì (Pb)',
+    'Crom VI (Cr6+)',
+    'Tổng Crom',
+    'Đồng (Cu)',
+    'Kẽm (Zn)',
+    'Mangan (Mn)',
+    'Sắt (Fe)',
+    'Tổng dầu mỡ khoáng',
 ]
 
+OYSTER_INPUT_FIELDS = [
+    'DO',
+    'Nhiệt độ nước biển',
+    'pH',
+    'Độ mặn',
+    'Độ kiềm',
+    'Độ trong',
+    'NH3',
+    'H2S',
+    'Nhiệt độ không khí',
+    'BOD5(20C)',
+    'COD',
+    'Coliform',
+    'TSS',
+    'CN-',
+    'Asen (As)',
+    'Cadimi (Cd)',
+    'Chì (Pb)',
+    'Cu',
+    'Hg',
+    'Zn',
+    'Tổng Crom',
+]
+
+# Current oyster .pkl files expose n_features_in_=15 and stack metadata lists
+# these 15 core features. The remaining oyster input fields are accepted and
+# stored by Express, but are not sent to the model.
+OYSTER_PREDICTION_FIELDS = [
+    'DO',
+    'pH',
+    'Độ mặn',
+    'Độ trong',
+    'TSS',
+    'Coliform',
+    'CN-',
+    'Asen (As)',
+    'Cadimi (Cd)',
+    'Chì (Pb)',
+    'Cu',
+    'Hg',
+    'Zn',
+    'Tổng Crom',
+    'Nhiệt độ nước biển',
+]
+
+PREDICTION_FIELDS_BY_SPECIES = {
+    'cobia': COBIA_PREDICTION_FIELDS,
+    'oyster': OYSTER_PREDICTION_FIELDS,
+}
+
+INPUT_FIELDS_BY_SPECIES = {
+    'cobia': COBIA_PREDICTION_FIELDS,
+    'oyster': OYSTER_INPUT_FIELDS,
+}
+
+# Backward-compatible union used by older status/debug paths.
+REQUIRED_FIELDS = list(dict.fromkeys(COBIA_PREDICTION_FIELDS + OYSTER_INPUT_FIELDS))
 
 DEFAULT_FALLBACK_VALUES = {
-    'T_degC': 29.0,       # Nhiệt độ lý tưởng
-    'Salnty': 30.0,       # Độ mặn lý tưởng
-    'O2ml_L': 5.0,        # Oxy hòa tan
-    'R_PO4': 0.5,         # Phosphate
-    'IntChl': 0.2,        # Chlorophyll
-    'Wave_Ht': 0.8,       # Chiều cao sóng thấp
-    'Wave_Prd': 7.0,      # Chu kỳ sóng trung bình
-    'Wind_Spd': 5.0,      # Tốc độ gió nhẹ (m/s)
-    'O2Sat': 95.0,        # Độ bão hòa Oxy
-    'STheta': 22.0,       # Mật độ nước biển
-    'R_DYNHT': 0,         # Các giá trị này thường là 0 hoặc giá trị mặc định
-    'R_Depth': 10,
-    'Distance': -50,
-    'Dry_T': 28,
+    'Độ mặn': 30.0,
+    'Nhiệt độ nước biển': 29.0,
+    'DO': 5.0,
+    'pH': 8.0,
+    'Tổng chất rắn lơ lửng (TSS)': 20.0,
+    'TSS': 20.0,
+    'Amoni (NH4+)': 0.1,
+    'Phosphat (PO43-)': 0.05,
+    'Florua (F-)': 1.0,
+    'Xianua (CN-)': 0.005,
+    'CN-': 0.005,
+    'Asen (As)': 0.01,
+    'Cadimi (Cd)': 0.005,
+    'Chì (Pb)': 0.01,
+    'Crom VI (Cr6+)': 0.01,
+    'Tổng Crom': 0.05,
+    'Đồng (Cu)': 0.02,
+    'Cu': 0.02,
+    'Kẽm (Zn)': 0.05,
+    'Zn': 0.05,
+    'Mangan (Mn)': 0.1,
+    'Sắt (Fe)': 0.3,
+    'Tổng dầu mỡ khoáng': 0.1,
+    'Độ kiềm': 100.0,
+    'Độ trong': 30.0,
+    'NH3': 0.1,
+    'H2S': 0.01,
+    'Nhiệt độ không khí': 28.0,
+    'BOD5(20C)': 4.0,
+    'COD': 10.0,
+    'Coliform': 1000.0,
+    'Hg': 0.001,
 }
 
 FETCH_SECRET_KEY = 'your-very-secret-and-random-string-12345'
