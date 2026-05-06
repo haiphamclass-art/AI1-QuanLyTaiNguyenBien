@@ -9,6 +9,12 @@ const formatDuration = (hrtime) => {
 const buildMessage = ({ status, method, url, durationMs }) =>
   `${status} ${method} ${url} +${durationMs}ms`;
 
+const maskSensitiveUrl = (url = '') =>
+  url.replace(
+    /\/emails\/unsubscribe\/[a-f0-9]{64}(?=$|[/?#])/i,
+    '/emails/unsubscribe/[redacted]'
+  );
+
 const logByStatus = ({ status, message, meta }) => {
   if (status >= 500) {
     logger.error(`[HTTP] ${message}`, meta);
@@ -24,6 +30,7 @@ const logByStatus = ({ status, message, meta }) => {
 module.exports = function requestLogger(req, res, next) {
   const start = process.hrtime();
   const { method, originalUrl } = req;
+  const safeUrl = maskSensitiveUrl(originalUrl);
 
   const baseMeta = {
     ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
@@ -33,12 +40,12 @@ module.exports = function requestLogger(req, res, next) {
   res.on('finish', () => {
     const durationMs = formatDuration(process.hrtime(start));
     const status = res.statusCode;
-    const message = buildMessage({ status, method, url: originalUrl, durationMs });
+    const message = buildMessage({ status, method, url: safeUrl, durationMs });
     const meta = {
       ...baseMeta,
       status,
       method,
-      url: originalUrl,
+      url: safeUrl,
       duration_ms: durationMs,
       content_length: res.get('content-length') || 0,
     };
@@ -48,12 +55,12 @@ module.exports = function requestLogger(req, res, next) {
   res.on('error', (error) => {
     const durationMs = formatDuration(process.hrtime(start));
     const status = res.statusCode || 500;
-    const message = buildMessage({ status, method, url: originalUrl, durationMs });
+    const message = buildMessage({ status, method, url: safeUrl, durationMs });
     logger.error(`[HTTP] ${message}`, {
       ...baseMeta,
       status,
       method,
-      url: originalUrl,
+      url: safeUrl,
       duration_ms: durationMs,
       error: error.message,
       stack: error.stack,

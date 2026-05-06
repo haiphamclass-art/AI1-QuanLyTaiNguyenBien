@@ -2,8 +2,6 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 const { Area, AreaSubscription } = require('../models'); // Adjust the path as necessary
 const logger = require('../config/logger');
-const EMAIL_PASSWORD = (process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || '')
-  .replace(/\s+/g, '');
 
 
 const sendEmail = async (req, res) => {
@@ -14,7 +12,7 @@ const sendEmail = async (req, res) => {
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,      // your Gmail
-      pass: EMAIL_PASSWORD,      // your App Password
+      pass: process.env.EMAIL_PASS,      // your App Password
     },
   });
 

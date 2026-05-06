@@ -5,8 +5,10 @@
   "homepage": "/quanlytainguyen",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "vite --mode development",
+    "build": "tsc -b && vite build --emptyOutDir",
+    "build:staging": "tsc -b && vite build --mode staging --emptyOutDir",
+    "build:production": "tsc -b && vite build --mode production --emptyOutDir",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -19,6 +21,7 @@
     "antd": "^5.25.0",
     "axios": "^1.7.9",
     "dayjs": "^1.11.19",
+    "frontend": "file:",
     "i18next": "^25.0.2",
     "i18next-browser-languagedetector": "^8.1.0",
     "jwt-decode": "^4.0.0",

@@ -145,6 +145,7 @@ router.get('/callback', async (req, res) => {
         res.send(`
       <html>
         <head>
+          <meta http-equiv="refresh" content="3;url=/" />
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -181,12 +182,6 @@ router.get('/callback', async (req, res) => {
           <p>Google Drive has been authorized successfully.</p>
           <p>You can now upload ML model files to Google Drive.</p>
           <a href="/" class="button">Go to Dashboard</a>
-          <script>
-            // Auto close after 3 seconds
-            setTimeout(() => {
-              window.close();
-            }, 3000);
-          </script>
         </body>
       </html>
     `);

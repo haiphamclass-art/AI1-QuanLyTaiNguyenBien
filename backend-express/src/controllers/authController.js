@@ -1,12 +1,16 @@
-require('dotenv').config();
 const { User } = require('../models');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 const logger = require('../config/logger');
-const EMAIL_USER = process.env.EMAIL_USER || 'your-email@gmail.com';
-const EMAIL_PASSWORD = (process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || 'your-app-password')
-  .replace(/\s+/g, '');
+const {
+  JWT_SECRET,
+  JWT_EXPIRES_IN,
+  buildTokenPayload,
+  buildUserResponse,
+  setAuthCookie,
+  clearAuthCookie,
+} = require('../config/auth');
 
 exports.login = async (req, res) => {
   try {
@@ -20,19 +24,14 @@ exports.login = async (req, res) => {
 
     if (user.status === 'inactivate')
       return res.status(403).json({ error: 'Your account is deactivated' });
-    const token = jwt.sign(
-      {
-        id: user.id,
-        name: user.username || user.name,
-        role: user.role,
-        province: user.province,
-        district: user.district,
-      },
-      'SECRET_KEY',
-      { expiresIn: '10d' }
-    );
+    const token = jwt.sign(buildTokenPayload(user), JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    setAuthCookie(req, res, token);
 
-    res.status(200).json({ token, role: user.role });
+    res.status(200).json({
+      message: 'Login successful',
+      role: user.role,
+      user: buildUserResponse(user),
+    });
   } catch (error) {
     logger.error('Login Error:', {
       message: error.message,
@@ -41,6 +40,11 @@ exports.login = async (req, res) => {
     });
     res.status(500).json({ error: error.message });
   }
+};
+
+exports.logout = async (req, res) => {
+  clearAuthCookie(req, res);
+  return res.status(200).json({ message: 'Logout successful' });
 };
 
 exports.createManagerUser = async (req, res) => {
@@ -518,21 +522,9 @@ exports.getCurrentUser = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Return user data without sensitive information
-    const userData = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      address: user.address,
-      phone: user.phone,
-      province: user.province,
-      district: user.district,
-      login_name: user.login_name,
-    };
-
-    return res.status(200).json(userData);
+    return res.status(200).json({
+      user: buildUserResponse(user),
+    });
   } catch (error) {
     logger.error('Get Current User Error:', {
       message: error.message,
@@ -680,12 +672,12 @@ exports.sendResetPasswordOTP = async (req, res) => {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASSWORD,
+        user: process.env.EMAIL_USER || 'your-email@gmail.com',
+        pass: process.env.EMAIL_PASS || 'your-app-password',
       },
     });
     const mailOptions = {
-      from: EMAIL_USER,
+      from: process.env.EMAIL_USER || 'your-email@gmail.com',
       to: email,
       subject: 'Mã xác thực đặt lại mật khẩu - Hệ thống Dự đoán Nuôi trồng Thủy sản',
       html: `

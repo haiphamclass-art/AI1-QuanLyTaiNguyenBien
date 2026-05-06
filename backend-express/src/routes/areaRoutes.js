@@ -1,11 +1,24 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middlewares/authMiddleware');
-const { getAllAreas, getAllAreasNoPagination, getAreaById, createArea, updateArea, deleteArea, getAreaStats, getAreaStatsByType, getAreaStatsCombined } = require('../controllers/areaController');
+const {
+    getAllAreas,
+    getAllAreasNoPagination,
+    getAreaById,
+    getPublicMapAreas,
+    getPublicMapAreaById,
+    createArea,
+    updateArea,
+    deleteArea,
+    getAreaStats,
+    getAreaStatsByType,
+    getAreaStatsCombined,
+} = require('../controllers/areaController');
 const { Province, Area, District } = require('../models/index.js');
 const multer = require('multer');
 const logger = require('../config/logger');
 const fs = require('fs');
 const path = require('path');
+const { applyAreaScope, AreaScopeError } = require('../utils/areaScope');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const router = express.Router();
@@ -17,7 +30,8 @@ const router = express.Router();
  *     summary: Get all areas (Admin/Manager/Expert only)
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     description: Scope is derived from the authenticated cookie token. Query role/province/district do not grant access.
  *     parameters:
  *       - in: query
  *         name: page
@@ -31,16 +45,6 @@ const router = express.Router();
  *           type: integer
  *           default: 10
  *         description: Number of areas per page
- *       - in: query
- *         name: province
- *         schema:
- *           type: integer
- *         description: Filter by province ID
- *       - in: query
- *         name: district
- *         schema:
- *           type: integer
- *         description: Filter by district ID
  *       - in: query
  *         name: area_type
  *         schema:
@@ -67,7 +71,7 @@ const router = express.Router();
      *                       name:
      *                         type: string
      *                         description: Area name
-     *                         example: "Khu vực nuôi tôm A"
+     *                         example: "Khu vá»±c nuÃ´i tÃ´m A"
      *                       latitude:
      *                         type: number
      *                         format: double
@@ -108,7 +112,7 @@ const router = express.Router();
      *                 value:
      *                   areas:
      *                     - id: 1
-     *                       name: "Khu vực nuôi hàu A"
+     *                       name: "Khu vá»±c nuÃ´i hÃ u A"
      *                       latitude: 10.762622
      *                       longitude: 106.660172
      *                       area: 1000.5
@@ -116,7 +120,7 @@ const router = express.Router();
      *                       district: "123e4567-e89b-12d3-a456-426614174001"
      *                       area_type: "oyster"
      *                     - id: 2
-     *                       name: "Khu vực nuôi cá cobia B"
+     *                       name: "Khu vá»±c nuÃ´i cÃ¡ cobia B"
      *                       latitude: 10.800000
      *                       longitude: 106.700000
      *                       area: 1500.0
@@ -132,9 +136,11 @@ router.get('/', authenticate, authorize(['admin', 'manager', 'expert']), getAllA
  * @swagger
  * /areas/all:
  *   get:
- *     summary: Get all areas without pagination (Public)
+ *     summary: Get all areas without pagination (Admin/Manager/Expert only)
  *     tags: [Areas]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
+ *     description: Scope is derived from the authenticated cookie token. Query role/province/district do not grant access.
  *     parameters:
  *       - in: query
  *         name: search
@@ -147,16 +153,6 @@ router.get('/', authenticate, authorize(['admin', 'manager', 'expert']), getAllA
  *           type: string
  *           enum: [oyster, shrimp, fish]
  *         description: Filter by area type
- *       - in: query
- *         name: province
- *         schema:
- *           type: integer
- *         description: Filter by province ID
- *       - in: query
- *         name: district
- *         schema:
- *           type: integer
- *         description: Filter by district ID
  *     responses:
  *       200:
  *         description: List of all areas
@@ -175,7 +171,7 @@ router.get('/', authenticate, authorize(['admin', 'manager', 'expert']), getAllA
  *                         example: 1
  *                       name:
  *                         type: string
- *                         example: "Khu vực nuôi tôm A"
+ *                         example: "Khu vá»±c nuÃ´i tÃ´m A"
  *                       latitude:
  *                         type: number
  *                         example: 10.762622
@@ -203,7 +199,34 @@ router.get('/', authenticate, authorize(['admin', 'manager', 'expert']), getAllA
  *       500:
  *         description: Server error
  */
-router.get('/all', getAllAreasNoPagination);
+router.get('/all', authenticate, authorize(['admin', 'manager', 'expert']), getAllAreasNoPagination);
+
+router.get('/public/all', getPublicMapAreas);
+router.get('/public/area/:id', getPublicMapAreaById);
+router.get('/public/provinces', async (req, res) => {
+    try {
+        const provinces = await Province.findAll({
+            attributes: ['id', 'name', 'central_meridian'],
+            order: [['name', 'ASC']],
+        });
+        return res.status(200).json(provinces);
+    } catch (error) {
+        logger.error('Get Public Provinces Error:', error);
+        return res.status(500).json({ error: 'Failed to fetch public provinces.' });
+    }
+});
+router.get('/public/districts', async (req, res) => {
+    try {
+        const districts = await District.findAll({
+            attributes: ['id', 'name', 'province_id'],
+            order: [['name', 'ASC']],
+        });
+        return res.status(200).json(districts);
+    } catch (error) {
+        logger.error('Get Public Districts Error:', error);
+        return res.status(500).json({ error: 'Failed to fetch public districts.' });
+    }
+});
 
 /**
  * @swagger
@@ -212,24 +235,8 @@ router.get('/all', getAllAreasNoPagination);
  *     summary: Get area statistics (total and distribution by province)
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: role
- *         schema:
- *           type: string
- *           enum: [admin, manager, expert]
- *         description: User role (used by frontend for consistent filtering)
- *       - in: query
- *         name: province
- *         schema:
- *           type: integer
- *         description: Filter by province ID
- *       - in: query
- *         name: district
- *         schema:
- *           type: integer
- *         description: Filter by district ID
+ *       - cookieAuth: []
+ *     description: Scope is derived from the authenticated cookie token. Query role/province/district do not grant access.
  *     responses:
  *       200:
  *         description: Area stats summary
@@ -270,21 +277,8 @@ router.get(
  *     summary: Get area statistics by type (oyster/cobia)
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: role
- *         schema:
- *           type: string
- *           enum: [admin, manager]
- *       - in: query
- *         name: province
- *         schema:
- *           type: integer
- *       - in: query
- *         name: district
- *         schema:
- *           type: integer
+ *       - cookieAuth: []
+ *     description: Scope is derived from the authenticated cookie token. Query role/province/district do not grant access.
  *     responses:
  *       200:
  *         description: Area stats by type
@@ -321,21 +315,8 @@ router.get(
  *     summary: Get combined area statistics (by type, by province, and by type per province)
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: role
- *         schema:
- *           type: string
- *           enum: [admin, manager]
- *       - in: query
- *         name: province
- *         schema:
- *           type: integer
- *       - in: query
- *         name: district
- *         schema:
- *           type: integer
+ *       - cookieAuth: []
+ *     description: Scope is derived from the authenticated cookie token. Query role/province/district do not grant access.
  *     responses:
  *       200:
  *         description: Combined area statistics
@@ -364,9 +345,11 @@ router.get(
  * @swagger
  * /areas/area/{id}:
  *   get:
- *     summary: Get area by ID (Public)
+ *     summary: Get area by ID (Admin/Manager/Expert only)
  *     tags: [Areas]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
+ *     description: The current area object must be within the authenticated user's scope.
  *     parameters:
  *       - in: path
  *         name: id
@@ -389,7 +372,7 @@ router.get(
      *                 name:
      *                   type: string
      *                   description: Area name
-     *                   example: "Khu vực nuôi hàu A"
+     *                   example: "Khu vá»±c nuÃ´i hÃ u A"
      *                 latitude:
      *                   type: number
      *                   format: double
@@ -425,7 +408,7 @@ router.get(
      *                 summary: Successful response
      *                 value:
      *                   id: 1
-     *                   name: "Khu vực nuôi hàu A"
+     *                   name: "Khu vá»±c nuÃ´i hÃ u A"
      *                   latitude: 10.762622
      *                   longitude: 106.660172
      *                   area: 1000.5
@@ -437,15 +420,16 @@ router.get(
      *       500:
      *         description: Server error
  */
-router.get('/area/:id', getAreaById);
+router.get('/area/:id', authenticate, authorize(['admin', 'manager', 'expert']), getAreaById);
 
 /**
  * @swagger
  * /areas/provinces:
  *   get:
- *     summary: Get all provinces (Public)
+ *     summary: Get provinces in current scope
  *     tags: [Areas]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: List of provinces
@@ -463,15 +447,19 @@ router.get('/area/:id', getAreaById);
  *       500:
  *         description: Server error
  */
-router.get('/provinces', async (req, res) => { return res.status(200).json(await Province.findAll()) });
+router.get('/provinces', authenticate, authorize(['admin', 'manager', 'expert']), async (req, res) => {
+    const where = req.user?.role === 'admin' || !req.user?.province ? {} : { id: req.user.province };
+    return res.status(200).json(await Province.findAll({ where }));
+});
 
 /**
  * @swagger
  * /areas/districts:
  *   get:
- *     summary: Get all districts (Public)
+ *     summary: Get districts in current scope
  *     tags: [Areas]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: List of districts
@@ -491,15 +479,29 @@ router.get('/provinces', async (req, res) => { return res.status(200).json(await
  *       500:
  *         description: Server error
  */
-router.get('/districts', async (req, res) => { return res.status(200).json(await District.findAll()) });
+router.get('/districts', authenticate, authorize(['admin', 'manager', 'expert']), async (req, res) => {
+    let where = {};
+    if (req.user?.role !== 'admin') {
+        if (req.user?.district) {
+            where.id = req.user.district;
+        } else if (req.user?.province) {
+            where.province_id = req.user.province;
+        } else {
+            return res.status(403).json({ error: 'User is not assigned to a province or district.' });
+        }
+    }
+
+    return res.status(200).json(await District.findAll({ where }));
+});
 
 /**
  * @swagger
  * /areas/district/{id}:
  *   get:
- *     summary: Get areas by district ID (Public)
+ *     summary: Get areas by district ID within current scope
  *     tags: [Areas]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -519,12 +521,19 @@ router.get('/districts', async (req, res) => { return res.status(200).json(await
  *       500:
  *         description: Server error
  */
-router.get('/district/:id', async (req, res) => {
+router.get('/district/:id', authenticate, authorize(['admin', 'manager', 'expert']), async (req, res) => {
     const districtId = req.params.id;
     try {
-        const areas = await Area.findAll({ where: { district: districtId } });
+        const scopedWhere = applyAreaScope({ district: districtId }, req.user);
+        if (String(scopedWhere.district) !== String(districtId)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const areas = await Area.findAll({ where: scopedWhere });
         return res.status(200).json(areas);
     } catch (error) {
+        if (error instanceof AreaScopeError) {
+            return res.status(error.status).json({ error: error.message });
+        }
         return res.status(500).json({ error: 'Error fetching areas by region ID' });
     }
 });
@@ -533,9 +542,10 @@ router.get('/district/:id', async (req, res) => {
  * @swagger
  * /areas/province/{id}:
  *   get:
- *     summary: Get areas by province ID (Public)
+ *     summary: Get areas by province ID within current scope
  *     tags: [Areas]
- *     security: []
+ *     security:
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -555,12 +565,22 @@ router.get('/district/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/province/:id', async (req, res) => {
+router.get('/province/:id', authenticate, authorize(['admin', 'manager', 'expert']), async (req, res) => {
     const provinceId = req.params.id;
     try {
-        const areas = await Area.findAll({ where: { province: provinceId } });
+        if (req.user?.role !== 'admin' && req.user?.province && String(req.user.province) !== String(provinceId)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const scopedWhere = applyAreaScope({ province: provinceId }, req.user);
+        if (scopedWhere.province && String(scopedWhere.province) !== String(provinceId)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const areas = await Area.findAll({ where: scopedWhere });
         return res.status(200).json(areas);
     } catch (error) {
+        if (error instanceof AreaScopeError) {
+            return res.status(error.status).json({ error: error.message });
+        }
         return res.status(500).json({ error: 'Error fetching areas by region ID' });
     }
 });
@@ -572,7 +592,7 @@ router.get('/province/:id', async (req, res) => {
  *     summary: Create new area
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -587,7 +607,7 @@ router.get('/province/:id', async (req, res) => {
  *             properties:
  *               name:
  *                 type: string
- *                 example: "Khu vực nuôi tôm A"
+ *                 example: "Khu vá»±c nuÃ´i tÃ´m A"
  *               latitude:
  *                 type: number
  *                 format: float
@@ -629,7 +649,7 @@ router.post('/', authenticate, authorize(['admin', 'manager']), createArea);
  *     summary: Update area by ID
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -684,7 +704,7 @@ router.put('/:id', authenticate, authorize(['admin', 'manager']), updateArea);
  *     summary: Delete area by ID
  *     tags: [Areas]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -726,6 +746,14 @@ router.post('/import-excel', authenticate, authorize(['admin', 'manager']), uplo
 
     let filePath;
     try {
+        const scopedWhere = applyAreaScope({ province: provinceId, district: districtId }, req.user);
+        if (
+            String(scopedWhere.province) !== String(provinceId)
+            || String(scopedWhere.district) !== String(districtId)
+        ) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
         const district = await District.findOne({ where: { id: districtId } });
         if (!district) {
             return res.status(400).json({ error: 'district_not_found' });
@@ -768,7 +796,7 @@ router.post('/import-excel', authenticate, authorize(['admin', 'manager']), uplo
         logger.info('[API] Area import job enqueued successfully', { jobId });
         return res.json({
             jobId,
-            message: 'Đã tạo job import khu vực. Vui lòng theo dõi tiến trình tại trang Jobs.',
+            message: 'ÄÃ£ táº¡o job import khu vá»±c. Vui lÃ²ng theo dÃµi tiáº¿n trÃ¬nh táº¡i trang Jobs.',
             redirect: '/jobs',
         });
     } catch (error) {
@@ -788,7 +816,7 @@ router.post('/import-excel', authenticate, authorize(['admin', 'manager']), uplo
             }
         }
 
-        return res.status(500).json({ error: 'failed_to_queue_area_import', message: error.message });
+        return res.status(500).json({ error: 'failed_to_queue_area_import' });
     }
 });
 

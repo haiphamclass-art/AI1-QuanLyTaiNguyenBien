@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const {
   getAllMLModels,
+  getPublicMLModelMetadata,
+  getPublicMLModelMetadataById,
+  getMLModelInternals,
+  getMLModelInternalById,
   getMLModelById,
   createMLModel,
   updateMLModel,
@@ -28,7 +32,7 @@ const { upload } = require('../middlewares/uploadModel');
  *     summary: Get all ML models with optional filters
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: is_active
@@ -54,7 +58,11 @@ const { upload } = require('../middlewares/uploadModel');
  *       500:
  *         description: Internal server error
  */
-router.get('/', authenticate, getAllMLModels);
+router.get('/public', getPublicMLModelMetadata);
+router.get('/public/:id', getPublicMLModelMetadataById);
+router.get('/admin/internal', authenticate, authorize(['admin']), getMLModelInternals);
+router.get('/admin/internal/:id', authenticate, authorize(['admin']), getMLModelInternalById);
+router.get('/', authenticate, authorize(['admin']), getAllMLModels);
 
 /**
  * @swagger
@@ -63,7 +71,7 @@ router.get('/', authenticate, getAllMLModels);
  *     summary: Get a single ML model by ID
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -81,14 +89,14 @@ router.get('/', authenticate, getAllMLModels);
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', authenticate, getMLModelById);
+router.get('/:id', authenticate, authorize(['admin']), getMLModelById);
 
 /**
  * @route POST /api/express/ml-models/check-duplicate
  * @desc Check for duplicate model names and file paths
  * @access Private
  */
-router.post('/check-duplicate', authenticate, checkDuplicate);
+router.post('/check-duplicate', authenticate, authorize(['admin']), checkDuplicate);
 
 /**
  * @swagger
@@ -97,7 +105,7 @@ router.post('/check-duplicate', authenticate, checkDuplicate);
  *     summary: Create a new ML model (Admin only)
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -157,7 +165,7 @@ router.post('/', authenticate, authorize(['admin']), createMLModel);
  *     summary: Update an ML model (Admin only)
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -219,7 +227,7 @@ router.put('/:id', authenticate, authorize(['admin']), updateMLModel);
  *     summary: Delete an ML model (Admin only)
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -248,7 +256,7 @@ router.delete('/:id', authenticate, authorize(['admin']), deleteMLModel);
  *     summary: Toggle ML model active status (Admin only)
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -291,7 +299,7 @@ router.patch('/:id/toggle-status', authenticate, authorize(['admin']), toggleMLM
  *     summary: Upload ML model file (.pkl) (Admin only)
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -361,7 +369,7 @@ router.post(
  *     summary: Update fallback value for a model's nature element
  *     tags: [ML Models]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -400,4 +408,3 @@ router.put(
 );
 
 module.exports = router;
-

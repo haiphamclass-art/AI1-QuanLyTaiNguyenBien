@@ -1,4 +1,5 @@
 # /project_flask_api/prediction_module/routes.py
+import traceback
 
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime
@@ -14,22 +15,15 @@ def handle_prediction(species):
         user_data = request.get_json(silent=True)
         if user_data is None:
             user_data = {}
-
         if not isinstance(user_data, dict):
-            return jsonify({
-                "error": "Invalid JSON input",
-                "message": "Invalid JSON input",
-            }), 400
+            return jsonify({"error": "Invalid JSON input"}), 400
 
-        query_model = request.args.get("model")
-        if query_model and not user_data.get("model"):
-            user_data["model"] = query_model
+        model_from_query = request.args.get('model')
+        if model_from_query and not user_data.get('model'):
+            user_data['model'] = model_from_query
 
         if not user_data:
-            return jsonify({
-                "error": "Invalid JSON input",
-                "message": "Invalid JSON input",
-            }), 400
+            return jsonify({"error": "Invalid JSON input"}), 400
         
         # Lấy credentials từ config
         credentials = {
@@ -43,42 +37,17 @@ def handle_prediction(species):
         )
 
         # Tạo response hoàn chỉnh
-        rounded_features = {
-            key: round(value, 2) if isinstance(value, float) else value
-            for key, value in final_features.items()
-            if key in services.REQUIRED_FIELDS
-        }
-
-        if status_code >= 400:
-            if isinstance(prediction_result, dict):
-                error_message = prediction_result.get("error") or prediction_result.get("message") or "Prediction request failed"
-                details = {
-                    key: value
-                    for key, value in prediction_result.items()
-                    if key not in {"error", "message"}
-                }
-            else:
-                error_message = str(prediction_result) or "Prediction request failed"
-                details = {}
-
-            error_payload = {
-                "error": error_message,
-                "message": error_message,
-            }
-            if details:
-                error_payload["details"] = details
-            if rounded_features:
-                error_payload["final_features_used"] = rounded_features
-
-            return jsonify(error_payload), status_code
-
-        return jsonify({
+        response_data = {
             "prediction_result": prediction_result,
-            "final_features_used": rounded_features,
-        }), status_code
+            "final_features_used": {k: round(v, 2) if isinstance(v, float) else v for k, v in final_features.items() if k in services.REQUIRED_FIELDS}
+        }
+        
+        return jsonify(response_data), status_code
 
     except Exception as e:
-        return jsonify({'error': str(e), 'message': str(e)}), 500
+        print("Prediction error details:")
+        traceback.print_exc()  # Dòng này sẽ in lỗi 'gpu_id' kèm dòng code cụ thể ra Terminal
+        return jsonify({'error': str(e)}), 500
 
 
 @prediction_api.route('/trigger_fetch', methods=['POST'])

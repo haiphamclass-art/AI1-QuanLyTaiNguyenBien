@@ -20,7 +20,7 @@ const { Title } = Typography;
 
 const UserProfile = () => {
   const { t } = useTranslation();
-  const { token, role } = useSelector((state) => state.auth);
+  const { isAuthenticated } = useSelector((state) => state.auth);
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ const UserProfile = () => {
       try {
         // Use /auth/me instead of decoding token and fetching by ID
         const response = await axios.get('/api/express/auth/me');
-        setUserData(response.data);
+        setUserData(response.data.user);
       } catch (error) {
         console.error('Error fetching user data:', error);
         if (error.response?.status === 401) {
@@ -50,13 +50,13 @@ const UserProfile = () => {
       }
     };
 
-    if (token) {
+    if (isAuthenticated) {
       fetchUserData();
     } else {
       setLoading(false);
       navigate('/login');
     }
-  }, [token, navigate]);
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     const fetchRegions = async () => {

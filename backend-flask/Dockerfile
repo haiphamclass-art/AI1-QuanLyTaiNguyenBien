@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     gcc \
     g++ \
+    libexpat1 \
     libhdf5-dev \
     libnetcdf-dev \
     pkg-config \
@@ -37,13 +38,13 @@ RUN mkdir -p data shared_models
 # These will be loaded if shared_models is empty
 RUN if [ -d model ]; then echo "Built-in models found"; else echo "WARNING: No built-in models"; fi
 
-# Copy init script
-COPY init_models.sh /app/init_models.sh
-RUN chmod +x /app/init_models.sh
-
 # Create a non-root user for security
 RUN adduser --disabled-password --gecos '' appuser && \
     chown -R appuser:appuser /app
+
+ENV MPLCONFIGDIR=/tmp/matplotlib
+RUN mkdir -p /tmp/matplotlib && chmod 777 /tmp/matplotlib
+
 USER appuser
 
 # Expose Flask port
@@ -53,6 +54,9 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5001/status || exit 1
 
+# Copy init script
+COPY init_models.sh /app/init_models.sh
+
 # Start the Flask application
 # First run init script to copy built-in models if shared_models is empty
-CMD ["sh", "-c", "/app/init_models.sh && FLASK_APP=run.py flask run --host=0.0.0.0 --port=5001"]
+CMD ["sh", "-c", "sh /app/init_models.sh && FLASK_APP=run.py flask run --host=0.0.0.0 --port=5001"]

@@ -62,7 +62,7 @@ const AreaList = () => {
   const [form] = Form.useForm();
   const [importForm] = Form.useForm();
   const { t } = useTranslation();
-  const { token } = useSelector((state) => state.auth);
+  const { isAuthenticated } = useSelector((state) => state.auth);
   const navigate = useNavigate();
   const location = useLocation();
   const [map, setMap] = useState(null);
@@ -138,7 +138,7 @@ const AreaList = () => {
   // Fetch user info from /auth/me
   useEffect(() => {
     const fetchUserInfo = async () => {
-      if (!token) {
+      if (!isAuthenticated) {
         setUserInfo(null);
         setUserInfoLoading(false);
         return;
@@ -146,7 +146,7 @@ const AreaList = () => {
 
       try {
         const response = await axios.get('/api/express/auth/me');
-        setUserInfo(response.data);
+        setUserInfo(response.data.user);
       } catch (error) {
         console.error('Error fetching user info:', error);
         if (error.response?.status === 401) {
@@ -160,7 +160,7 @@ const AreaList = () => {
     };
 
     fetchUserInfo();
-  }, [token, navigate]);
+  }, [isAuthenticated, navigate]);
 
   const isWithinVietnam = (lat, lon) => lat >= 8 && lat <= 24 && lon >= 102 && lon <= 110;
   const convertVN2000ToWGS84 = (x, y, zone) => {

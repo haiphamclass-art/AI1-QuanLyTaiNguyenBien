@@ -1,12 +1,13 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../config/logger');
+const { AUTH_COOKIE_NAME, JWT_SECRET } = require('../config/auth');
 
 const authenticate = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
+  const token = req.cookies?.[AUTH_COOKIE_NAME];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const decoded = jwt.verify(token, 'SECRET_KEY');
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
   } catch (error) {

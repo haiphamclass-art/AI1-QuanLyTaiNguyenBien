@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import PredictionDetails from './PredictionDetails';
-import { jwtDecode } from 'jwt-decode';
 import axios from '../axios';
 import './Dashboard.css';
 import { useTranslation } from 'react-i18next';
@@ -33,9 +32,8 @@ const { Title } = Typography;
 
 const Dashboard = () => {
   const { t } = useTranslation();
-  const { token } = useSelector((state) => state.auth);
+  const { user, role, isAuthenticated } = useSelector((state) => state.auth);
   const navigate = useNavigate();
-  console.log('The token', token);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPredictions, setTotalPredictions] = useState(0);
   const [predictionsPerPage, setPredictionsPerPage] = useState(10);
@@ -76,21 +74,20 @@ const Dashboard = () => {
 
   // Load areas list for filter
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated) {
       try {
-        const decodedToken = jwtDecode(token);
-        setUserRole(decodedToken.role);
+        setUserRole(role);
         setIsLoadingAreas(true);
         axios
           .get('/api/express/areas/all')
           .then((response) => {
             // API returns { areas: [...] } format
             let areasData = response.data?.areas || response.data || [];
-            if (decodedToken.role === 'manager') {
-              if (decodedToken.district) {
-                areasData = areasData.filter(area => area.district === decodedToken.district);
+            if (role === 'manager') {
+              if (user?.district) {
+                areasData = areasData.filter(area => area.district === user.district);
               } else {
-                areasData = areasData.filter(area => area.province === decodedToken.province);
+                areasData = areasData.filter(area => area.province === user?.province);
               }
             }
             setAreas(Array.isArray(areasData) ? areasData : []);
@@ -105,14 +102,14 @@ const Dashboard = () => {
           });
 
       } catch (error) {
-        console.error('Error decoding token:', error);
+        console.error('Error loading user-scoped areas:', error);
       }
     }
-  }, [token]);
+  }, [isAuthenticated, role, user]);
 
   // Load provinces for filter (only for admin)
   useEffect(() => {
-    if (token && userRole === 'admin') {
+    if (isAuthenticated && userRole === 'admin') {
       setIsLoadingProvinces(true);
       axios
         .get('/api/express/areas/provinces')
@@ -128,7 +125,7 @@ const Dashboard = () => {
           setIsLoadingProvinces(false);
         });
     }
-  }, [token, userRole]);
+  }, [isAuthenticated, userRole]);
 
   // Load districts when province is selected (only for admin)
   useEffect(() => {
@@ -161,16 +158,12 @@ const Dashboard = () => {
     selectedProvince, selectedDistrict, startDate, endDate]);
 
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated && user?.id) {
       setLoading(true);
       try {
-        const decodedToken = jwtDecode(token); // Decode the JWT token
-        console.log(decodedToken);
-        setUserId(decodedToken.id); // Assuming `id` is the field for userId in the token
-        setUserRole(decodedToken.role);
-        setTimeout(100);
-        console.log(userId);
-        if (decodedToken.role === 'admin' || decodedToken.role === 'manager') {
+        setUserId(user.id);
+        setUserRole(role);
+        if (role === 'admin' || role === 'manager') {
           console.log('start fetching');
 
           const params = {
@@ -185,7 +178,7 @@ const Dashboard = () => {
           }
           if (selectedAreaType) params.areaType = selectedAreaType;
           // For admin, use selected filters. For manager, backend will auto-apply their province/district
-          if (userRole === 'admin') {
+          if (role === 'admin') {
             if (selectedProvince) params.province = selectedProvince;
             if (selectedDistrict) params.district = selectedDistrict;
           }
@@ -215,7 +208,7 @@ const Dashboard = () => {
           if (selectedAreaId) params.areaId = selectedAreaId;
 
           axios
-            .get(`/api/express/predictions/user/${decodedToken.id}`, { params })
+            .get(`/api/express/predictions/user/${user.id}`, { params })
             .then((response) => {
               // Backend now returns {rows: [], count: number} format
               if (response.data.rows !== undefined) {
@@ -236,13 +229,12 @@ const Dashboard = () => {
             });
         }
       } catch (error) {
-        console.error('Error decoding token:', error);
-        toast.error(t('dashboard.invalidToken'));
+        console.error('Error restoring dashboard session:', error);
         setLoading(false);
       }
     }
   }, [currentPage, selectedAreaId, predictionsPerPage, selectedPredictionResult, selectedAreaType,
-    selectedProvince, selectedDistrict, startDate, endDate]);
+    selectedProvince, selectedDistrict, startDate, endDate, isAuthenticated, role, user]);
 
   useEffect(() => { }, [predictionList]);
 
@@ -418,10 +410,9 @@ const Dashboard = () => {
 
       // Refresh predictions list
       // Trigger re-fetch by incrementing a counter or call fetch function
-      if (token) {
+      if (isAuthenticated && user?.id) {
         try {
-          const decodedToken = jwtDecode(token);
-          if (decodedToken.role === 'admin' || decodedToken.role === 'manager') {
+          if (role === 'admin' || role === 'manager') {
             const params = {
               limit: predictionsPerPage,
               offset: currentPage * predictionsPerPage,
@@ -432,7 +423,7 @@ const Dashboard = () => {
               params.predictionResult = selectedPredictionResult;
             }
             if (selectedAreaType) params.areaType = selectedAreaType;
-            if (userRole === 'admin') {
+            if (role === 'admin') {
               if (selectedProvince) params.province = selectedProvince;
               if (selectedDistrict) params.district = selectedDistrict;
             }
@@ -449,7 +440,7 @@ const Dashboard = () => {
             };
             if (selectedAreaId) params.areaId = selectedAreaId;
 
-            const response = await axios.get(`/api/express/predictions/user/${decodedToken.id}`, { params });
+            const response = await axios.get(`/api/express/predictions/user/${user.id}`, { params });
             if (response.data.rows !== undefined) {
               setPredictionList(response.data.rows);
               setTotalPredictions(response.data.count);

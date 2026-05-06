@@ -8,4 +8,7 @@ export default defineConfig({
     'process.env': {}
   },
   base: '/quanlytainguyen/',
+  build: {
+    emptyOutDir: true,
+  },
 });

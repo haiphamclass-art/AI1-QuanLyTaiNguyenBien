@@ -3,15 +3,28 @@ node_modules/
 
 .idea/
 .vscode/
+.venv/
+.venv*/
+venv/
+**/venv/
 __pycache__/
 *.pyc
 
 .env
+.env.*
+!.env.example
 *.log
+*.log.gz
+logs/
+**/logs/
 
 dist/
 build/
 coverage/
+uploads/
+**/uploads/
+backend-flask/data/
+backend-flask/model/**/stack_gen_model.pkl
 
 dump-ocean-202512191103/
 backup.sql

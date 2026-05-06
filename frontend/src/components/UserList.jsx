@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from '../axios';
 import { useSelector } from 'react-redux';
 import './UserList.css';
-import { jwtDecode } from 'jwt-decode';
 import { useTranslation } from 'react-i18next';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import {
@@ -37,7 +36,7 @@ const { Title } = Typography;
 const UserList = () => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
-  const { token } = useSelector((state) => state.auth);
+  const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [authData, setAuthData] = useState(null);
   const [users, setUsers] = useState([]);
   const [isRegionPopup, setIsRegionPopup] = useState(false);
@@ -128,17 +127,8 @@ const UserList = () => {
   };
 
   useEffect(() => {
-    if (token) {
-      try {
-        console.log('token1', token);
-        const decodedToken = jwtDecode(token); // Decode the JWT token
-        setAuthData(decodedToken);
-        console.log('haha', authData);
-      } catch (error) {
-        console.error('Error decoding token:', error);
-      }
-    }
-  }, [token]);
+    setAuthData(user || null);
+  }, [user]);
 
   useEffect(() => {
     if (authData) {
@@ -214,11 +204,11 @@ const UserList = () => {
 
   // Always load provinces/districts once token is available
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated) {
       fetchRegions();
       fetchDistricts();
     }
-  }, [token]);
+  }, [isAuthenticated]);
 
   const getRegionNameFromId = (id) => {
     const region = regionList.find((r) => r.id === id);
@@ -260,8 +250,7 @@ const UserList = () => {
     try {
       // Auto-assign role for manager creating users
       try {
-        const decoded = jwtDecode(token);
-        if (decoded.role === 'manager' && !values.role) {
+        if (authData?.role === 'manager' && !values.role) {
           // If manager cấp tỉnh (có province nhưng không có district) tạo tài khoản với district
           // thì tự động gán role là district_manager (sẽ được convert thành 'manager' khi submit)
           if (values.district) {
@@ -534,20 +523,17 @@ const UserList = () => {
 
     // Pre-fill province/district for managers (especially district managers)
     try {
-      if (token) {
-        const decoded = jwtDecode(token);
-        if (decoded.role === 'manager') {
-          if (decoded.province) {
-            form.setFieldsValue({ province: decoded.province });
+      if (authData?.role === 'manager') {
+          if (authData?.province) {
+            form.setFieldsValue({ province: authData.province });
             // Filter district options to selected province
             setFilteredDistrictList(
-              districtList.filter((d) => d.province_id === decoded.province)
+              districtList.filter((d) => d.province_id === authData.province)
             );
           }
-          if (decoded.district) {
-            form.setFieldsValue({ district: decoded.district });
+          if (authData?.district) {
+            form.setFieldsValue({ district: authData.district });
           }
-        }
       }
     } catch (e) {
       // ignore decode issues
@@ -712,7 +698,7 @@ const UserList = () => {
                           </Tooltip>
                         )
                       ) : null}
-                      {jwtDecode(token).role === 'admin' &&
+                      {authData?.role === 'admin' &&
                         user.role !== 'admin' && (
                           <>
                             <Tooltip title="Đặt lại mật khẩu">
@@ -874,18 +860,18 @@ const UserList = () => {
           </Form.Item>
 
           {/* Show role select for admin or manager when editing or always when creating */}
-          {(!userPopupData.id || ['admin', 'manager'].includes(jwtDecode(token).role)) && (
+          {(!userPopupData.id || ['admin', 'manager'].includes(authData?.role)) && (
             <Form.Item
               name="role"
               label={t('userList.role')}
               rules={[{ required: true, message: t('userList.required') }]}
             >
               <Select
-                disabled={jwtDecode(token).role === 'manager'}
+                disabled={authData?.role === 'manager'}
                 size='large'
                 placeholder={t('userList.selectRole')}
                 options={
-                  jwtDecode(token).role === 'manager'
+                  authData?.role === 'manager'
                     ? [
                       {
                         value: 'district_manager',
@@ -920,9 +906,8 @@ const UserList = () => {
 
                   // If current user is manager, lock province to their own
                   try {
-                    const decoded = jwtDecode(token);
-                    if (decoded.role === 'manager' && decoded.province) {
-                      form.setFieldsValue({ province: decoded.province });
+                    if (authData?.role === 'manager' && authData?.province) {
+                      form.setFieldsValue({ province: authData.province });
                     }
                   } catch (e) {
                     // ignore decode issues
@@ -962,7 +947,7 @@ const UserList = () => {
           >
             <Select
               size='large'
-              disabled={jwtDecode(token).role === 'manager'}
+              disabled={authData?.role === 'manager'}
               showSearch
               placeholder={t('userList.selectProvince')}
               optionFilterProp="children"
@@ -994,7 +979,7 @@ const UserList = () => {
                 required:
                   form.getFieldValue('role') === 'expert' ||
                   form.getFieldValue('role') === 'district_manager' ||
-                  (jwtDecode(token)?.role === 'manager' && !form.getFieldValue('role')),
+                  (authData?.role === 'manager' && !form.getFieldValue('role')),
                 message: t('userList.required'),
               },
             ]}
@@ -1017,10 +1002,9 @@ const UserList = () => {
               onChange={(value) => {
                 // Auto-assign district_manager role when manager selects district
                 try {
-                  const decoded = jwtDecode(token);
-                  if (decoded.role === 'manager' && value && !form.getFieldValue('role')) {
-                    form.setFieldsValue({ role: 'district_manager' });
-                  }
+                    if (authData?.role === 'manager' && value && !form.getFieldValue('role')) {
+                      form.setFieldsValue({ role: 'district_manager' });
+                    }
                 } catch (e) {
                   // ignore decode errors
                 }

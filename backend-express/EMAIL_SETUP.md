@@ -18,7 +18,7 @@ Add the following environment variables to your `.env` file:
 ```env
 # Email Configuration
 EMAIL_USER=your-email@gmail.com
-EMAIL_PASS=your-app-password
+EMAIL_PASSWORD=your-app-password
 ```
 
 ### Gmail Setup
@@ -28,7 +28,7 @@ EMAIL_PASS=your-app-password
    - Go to Google Account settings
    - Security > 2-Step Verification > App passwords
    - Generate a new app password for "Mail"
-3. Use the generated password as `EMAIL_PASS`
+3. Use the generated password as `EMAIL_PASSWORD`
 
 ## Database Migration
 

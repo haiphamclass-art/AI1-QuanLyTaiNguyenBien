@@ -1,4 +1,6 @@
 const swaggerJsdoc = require('swagger-jsdoc');
+const { SWAGGER_SERVERS } = require('./publicUrls');
+const { AUTH_COOKIE_NAME } = require('./auth');
 
 const options = {
     definition: {
@@ -16,23 +18,14 @@ const options = {
                 url: 'https://opensource.org/licenses/MIT'
             }
         },
-        servers: [
-            {
-                url: 'http://localhost:5000/api/express',
-                description: 'Development server'
-            },
-            {
-                url: 'http://dhtbkc4.tbu.edu.vn/quanlytainguyen/api/express',
-                description: 'Production server (HTTP)'
-            }
-        ],
+        servers: SWAGGER_SERVERS,
         components: {
             securitySchemes: {
-                bearerAuth: {
-                    type: 'http',
-                    scheme: 'bearer',
-                    bearerFormat: 'JWT',
-                    description: 'JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"'
+                cookieAuth: {
+                    type: 'apiKey',
+                    in: 'cookie',
+                    name: AUTH_COOKIE_NAME,
+                    description: 'HttpOnly authentication cookie issued by the login endpoint'
                 }
             },
             schemas: {
@@ -196,10 +189,6 @@ const options = {
                             type: 'boolean',
                             description: 'Email verification status'
                         },
-                        unsubscribe_token: {
-                            type: 'string',
-                            description: 'Token for unsubscribing'
-                        },
                         created_at: {
                             type: 'string',
                             format: 'date-time',
@@ -297,7 +286,7 @@ const options = {
         },
         security: [
             {
-                bearerAuth: []
+                cookieAuth: []
             }
         ],
         tags: [

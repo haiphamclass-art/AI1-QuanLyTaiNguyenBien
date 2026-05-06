@@ -8,10 +8,9 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { logout } from "./redux/authSlice";
+import { fetchCurrentUser, logoutUser } from "./redux/authSlice";
 import Login from "./components/Login";
 import "react-toastify/dist/ReactToastify.css";
-import { jwtDecode } from "jwt-decode";
 import Dashboard from "./components/Dashboard";
 //import WelcomePage from "./components/WelcomePage";
 import Prediction from "./components/Prediction";
@@ -34,6 +33,7 @@ import ForgotPassword from "./components/ForgotPassword";
 import MLModelManagement from "./components/MLModelManagement";
 import { useTranslation } from "react-i18next";
 import LanguageSwitch from "./components/LanguageSwitch";
+import LoadingScreen from "./components/LoadingScreen";
 import {
   Layout,
   Menu,
@@ -69,6 +69,7 @@ import {
 const { Header, Sider, Content } = Layout;
 const { Title } = Typography;
 const { useBreakpoint } = Grid;
+const SUPPRESS_SPLASH_KEY = "suppress_loading_screen_once";
 
 const App = () => {
   const { t, i18n } = useTranslation();
@@ -76,31 +77,27 @@ const App = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const location = useLocation();
-  const { token, role } = useSelector((state) => state.auth);
+  const { user, role, isAuthenticated, isInitialized } = useSelector((state) => state.auth);
+  const normalizedPath = location.pathname.toLowerCase();
 
-  // Get user name from token with character limit based on screen size
-  // iPad (md): 25 chars, larger screens: 50 chars
+  useEffect(() => {
+    if (!isInitialized) {
+      dispatch(fetchCurrentUser());
+    }
+  }, [dispatch, isInitialized]);
+
+  useEffect(() => {
+    if (isInitialized) {
+      sessionStorage.removeItem(SUPPRESS_SPLASH_KEY);
+    }
+  }, [isInitialized]);
+
   const screens = useBreakpoint();
-  const userName = token
-    ? (() => {
-      try {
-        const decodedToken = jwtDecode(token);
-        const name = decodedToken.name || decodedToken.username || "";
-        if (!name) return "";
-        // iPad (md) and up: show name, limit based on screen size
-        console.log("name", name);
-        if (screens.md || screens.lg || screens.xl || screens.xxl) {
-          const maxLength = screens.md && !screens.lg ? 25 : 50; // iPad: 25, larger: 50
-          console.log("max", maxLength);
-          return name.length > maxLength
-            ? name.substring(0, maxLength) + "..."
-            : name;
-        }
-        return ""; // Don't show on small screens
-      } catch (e) {
-        return "";
-      }
-    })()
+  const rawUserName = user?.username || "";
+  const userName = screens.md || screens.lg || screens.xl || screens.xxl
+    ? rawUserName.length > (screens.md && !screens.lg ? 25 : 50)
+      ? `${rawUserName.substring(0, screens.md && !screens.lg ? 25 : 50)}...`
+      : rawUserName
     : "";
 
   const {
@@ -111,18 +108,41 @@ const App = () => {
     i18n.changeLanguage(lng);
   };
 
+  const navigateWithReload = (path) => {
+    sessionStorage.setItem(SUPPRESS_SPLASH_KEY, "1");
+    const baseUrl = import.meta.env.BASE_URL || "/";
+    const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+    const normalizedPathValue = path.startsWith("/") ? path.slice(1) : path;
+    window.location.assign(`${normalizedBase}${normalizedPathValue}`);
+  };
+
+  const handleLoginNavigation = () => {
+    navigateWithReload("/login");
+  };
+
+  const handleManagementNavigation = () => {
+    if (role === "admin" || role === "manager") {
+      navigateWithReload("/admin-stats");
+      return;
+    }
+
+    if (role === "expert") {
+      navigateWithReload("/dashboard");
+    }
+  };
+
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
     message.success(t("logout.success"));
     navigate("/");
   };
 
   const isSidebarVisible =
-    location.pathname !== "/interactive-map" &&
+    normalizedPath !== "/interactive-map" &&
     (role === "admin" ||
       role === "expert" ||
       role === "manager" ||
-      location.pathname === "/swagger");
+      normalizedPath === "/swagger");
 
   const getMenuItems = () => {
     // Common menu items for all users (including non-logged in)
@@ -200,7 +220,7 @@ const App = () => {
           icon: <AreaChartOutlined />,
           label: t("sidebar.area_list"),
         },
-        ...(!jwtDecode(token).district
+        ...(!user?.district
           ? [
             {
               key: "/user-list",
@@ -222,7 +242,7 @@ const App = () => {
     const items = [];
 
     // Add Map/Management to dropdown only on small screens
-    if (isSmallScreen && token) {
+    if (isSmallScreen && isAuthenticated) {
       if (location.pathname !== "/interactive-map") {
         items.push({
           key: "map",
@@ -232,33 +252,14 @@ const App = () => {
           onClick: () => navigate("/interactive-map"),
         });
       } else {
-        try {
-          const decodedToken = jwtDecode(token);
-          const currentTime = Math.floor(Date.now() / 1000);
-          const isTokenValid =
-            decodedToken.exp && decodedToken.exp > currentTime;
-          if (
-            isTokenValid &&
-            (role === "admin" || role === "expert" || role === "manager")
-          ) {
-            items.push({
-              key: "management",
-              icon: <DashboardOutlined />,
-              label: t("common.goToManagement"),
-              title: t("common.goToManagement"),
-              onClick: () => {
-                if (role === "admin") {
-                  navigate("/admin-stats");
-                } else if (role === "expert") {
-                  navigate("/dashboard");
-                } else if (role === "manager") {
-                  navigate("/admin-stats");
-                }
-              },
-            });
-          }
-        } catch (e) {
-          // Ignore error
+        if (role === "admin" || role === "expert" || role === "manager") {
+          items.push({
+            key: "management",
+            icon: <DashboardOutlined />,
+            label: t("common.goToManagement"),
+            title: t("common.goToManagement"),
+            onClick: handleManagementNavigation,
+          });
         }
       }
     }
@@ -289,7 +290,7 @@ const App = () => {
     );
 
     return items;
-  }, [token, role, location.pathname, screens.xs, screens.sm, navigate, t]);
+  }, [isAuthenticated, role, location.pathname, screens.xs, screens.sm, navigate, t]);
 
   const renderHeader = () => (
     <Header
@@ -375,7 +376,7 @@ const App = () => {
               </Button>
             </Space.Compact>
             {/* Map/Management buttons - only show on iPad and larger screens, icon only with tooltip */}
-            {token &&
+            {isAuthenticated &&
               (screens.md || screens.lg || screens.xl || screens.xxl) &&
               location.pathname !== "/interactive-map" && (
                 <Tooltip title={t("common.goToMap")}>
@@ -393,52 +394,26 @@ const App = () => {
                   />
                 </Tooltip>
               )}
-            {token &&
+            {isAuthenticated &&
               (screens.md || screens.lg || screens.xl || screens.xxl) &&
               location.pathname === "/interactive-map" &&
-              (() => {
-                try {
-                  const decodedToken = jwtDecode(token);
-                  const currentTime = Math.floor(Date.now() / 1000);
-                  const isTokenValid =
-                    decodedToken.exp && decodedToken.exp > currentTime;
-                  if (
-                    isTokenValid &&
-                    (role === "admin" ||
-                      role === "expert" ||
-                      role === "manager")
-                  ) {
-                    return (
-                      <Tooltip title={t("common.goToManagement")}>
-                        <Button
-                          type="default"
-                          size="middle"
-                          icon={<DashboardOutlined />}
-                          onClick={() => {
-                            if (role === "admin") {
-                              navigate("/admin-stats");
-                            } else if (role === "expert") {
-                              navigate("/dashboard");
-                            } else if (role === "manager") {
-                              navigate("/admin-stats");
-                            }
-                          }}
-                          style={{
-                            background: "#007bff",
-                            borderColor: "#007bff",
-                            color: "#fff",
-                            fontWeight: "bold",
-                          }}
-                        />
-                      </Tooltip>
-                    );
-                  }
-                } catch (e) {
-                  return null;
-                }
-                return null;
-              })()}
-            {token ? (
+              (role === "admin" || role === "expert" || role === "manager") && (
+                <Tooltip title={t("common.goToManagement")}>
+                  <Button
+                    type="default"
+                    size="middle"
+                    icon={<DashboardOutlined />}
+                    onClick={handleManagementNavigation}
+                    style={{
+                      background: "#007bff",
+                      borderColor: "#007bff",
+                      color: "#fff",
+                      fontWeight: "bold",
+                    }}
+                  />
+                </Tooltip>
+              )}
+            {isAuthenticated ? (
               <Space>
                 <Dropdown
                   menu={{ items: userMenuItems }}
@@ -495,7 +470,7 @@ const App = () => {
                   color: "#fff",
                   fontWeight: "bold",
                 }}
-                onClick={() => navigate("/Login")}
+                onClick={handleLoginNavigation}
               >
                 {t("login.button")}
               </Button>
@@ -537,6 +512,12 @@ const App = () => {
       document.head.removeChild(style);
     };
   }, []);
+
+  const suppressLoadingScreen = sessionStorage.getItem(SUPPRESS_SPLASH_KEY) === "1";
+
+  if (!isInitialized && !suppressLoadingScreen) {
+    return <LoadingScreen />;
+  }
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -616,48 +597,49 @@ const App = () => {
           transition: "all 0.2s",
         }}
       >
-        {location.pathname !== "/Login" && location.pathname !== "/swagger" && (
+      {normalizedPath !== "/login" && normalizedPath !== "/swagger" && (
           <div style={{ position: "relative", zIndex: 1 }}>
             {renderHeader()}
           </div>
         )}
         <Content
+          key={normalizedPath}
           style={{
             margin:
-              location.pathname === "/interactive-map"
+              normalizedPath === "/interactive-map"
                 ? 0
                 : screens.xs
                   ? "12px 8px"
                   : "24px 16px",
             padding:
-              location.pathname === "/interactive-map"
+              normalizedPath === "/interactive-map"
                 ? 0
                 : screens.xs
                   ? 16
                   : 24,
             background:
-              location.pathname === "/interactive-map"
+              normalizedPath === "/interactive-map"
                 ? "transparent"
                 : colorBgContainer,
             borderRadius:
-              location.pathname === "/interactive-map" ? 0 : borderRadiusLG,
+              normalizedPath === "/interactive-map" ? 0 : borderRadiusLG,
             minHeight:
-              location.pathname === "/interactive-map"
+              normalizedPath === "/interactive-map"
                 ? "calc(100vh - 64px)"
                 : 280,
             height:
-              location.pathname === "/interactive-map"
+              normalizedPath === "/interactive-map"
                 ? "calc(100vh - 64px)"
                 : "auto",
             overflow:
-              location.pathname === "/interactive-map" ? "hidden" : "visible",
+              normalizedPath === "/interactive-map" ? "hidden" : "visible",
           }}
         >
-          <Routes>
+          <Routes key={normalizedPath}>
             <Route
               path="/"
               element={
-                token ? (
+                isAuthenticated ? (
                   role === "admin" || role === "manager" ? (
                     <Navigate to="/admin-stats" replace />
                   ) : (
@@ -669,6 +651,7 @@ const App = () => {
               }
             />
             <Route path="/Login" element={<Login />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route
               path="/admin-stats"
@@ -699,9 +682,7 @@ const App = () => {
               path="/user-list"
               element={
                 <ProtectedRoute roles={["admin", "manager"]}>
-                  {token &&
-                    jwtDecode(token).role === "manager" &&
-                    jwtDecode(token).district ? (
+                  {role === "manager" && user?.district ? (
                     <Navigate to="/" replace />
                   ) : (
                     <UserList />

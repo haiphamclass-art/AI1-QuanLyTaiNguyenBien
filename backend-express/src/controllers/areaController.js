@@ -2,6 +2,12 @@ const { Op } = require('sequelize');
 const { Area, Province, District, Prediction, PredictionNatureElement, sequelize } = require('../models');
 const { sendPredictionNotification } = require('./emailController');
 const logger = require('../config/logger');
+const {
+  AreaScopeError,
+  applyAreaScope,
+  assertAreaWithinScope,
+  resolveAreaWriteLocation,
+} = require('../utils/areaScope');
 
 const normalizeSearchTerm = (value = '') =>
   value
@@ -21,6 +27,142 @@ const buildSearchCondition = (column, rawSearch) => {
   );
 };
 
+const handleAreaScopeError = (res, error) => {
+  if (error instanceof AreaScopeError) {
+    return res.status(error.status).json({ error: error.message });
+  }
+  return null;
+};
+
+const isBlank = (value) => value === undefined || value === null || String(value).trim() === '';
+
+const isFiniteNumber = (value) => value !== undefined && value !== null && Number.isFinite(Number(value));
+
+const isPositiveInteger = (value) => /^\d+$/.test(String(value)) && Number(value) > 0;
+
+const handleAreaDataError = (res, error) => {
+  if (
+    error?.name === 'SequelizeValidationError'
+    || error?.name === 'SequelizeUniqueConstraintError'
+    || error?.name === 'SequelizeForeignKeyConstraintError'
+    || error?.name === 'SequelizeDatabaseError'
+  ) {
+    return res.status(400).json({ error: 'Invalid area data.' });
+  }
+  return null;
+};
+
+const validateAreaCreateInput = ({ name, latitude, longitude, area_type }) => {
+  const missingFields = [];
+  if (isBlank(name)) missingFields.push('name');
+  if (latitude === undefined || latitude === null) missingFields.push('latitude');
+  if (longitude === undefined || longitude === null) missingFields.push('longitude');
+  if (isBlank(area_type)) missingFields.push('area_type');
+
+  if (missingFields.length) {
+    return { error: 'Missing required fields.', fields: missingFields };
+  }
+
+  if (!isFiniteNumber(latitude) || !isFiniteNumber(longitude)) {
+    return { error: 'latitude and longitude must be valid numbers.' };
+  }
+
+  if (area_type !== 'oyster' && area_type !== 'cobia') {
+    return { error: 'Invalid area_type. It must be either "oyster" or "cobia".' };
+  }
+
+  return null;
+};
+
+const validateAreaIdParam = (id) => {
+  if (!isPositiveInteger(id)) {
+    return { error: 'Invalid area id.' };
+  }
+  return null;
+};
+
+const validateAreaUpdateInput = ({ name, latitude, longitude, area, area_type }) => {
+  if (name !== undefined && isBlank(name)) {
+    return { error: 'name cannot be empty.' };
+  }
+
+  if (latitude !== undefined && !isFiniteNumber(latitude)) {
+    return { error: 'latitude must be a valid number.' };
+  }
+
+  if (longitude !== undefined && !isFiniteNumber(longitude)) {
+    return { error: 'longitude must be a valid number.' };
+  }
+
+  if (area !== undefined && !isFiniteNumber(area)) {
+    return { error: 'area must be a valid number.' };
+  }
+
+  if (area_type !== undefined && area_type !== 'oyster' && area_type !== 'cobia') {
+    return { error: 'Invalid area_type. It must be either "oyster" or "cobia".' };
+  }
+
+  return null;
+};
+
+const applyScopedQuery = (query, req) => applyAreaScope(query, req.user);
+
+const PUBLIC_AREA_ATTRIBUTES = [
+  'id',
+  'name',
+  'latitude',
+  'longitude',
+  'province',
+  'district',
+  'area',
+  'area_type',
+];
+
+const buildPublicAreaIncludes = () => [
+  {
+    model: Province,
+    as: 'Province',
+    required: false,
+    attributes: ['id', 'name', 'central_meridian'],
+  },
+  {
+    model: District,
+    as: 'District',
+    required: false,
+    attributes: ['id', 'name'],
+  },
+];
+
+const addLatestPredictionSummary = async (areas) => {
+  const areaIds = areas.map((area) => area.id);
+  if (!areaIds.length) return areas;
+
+  const allPredictions = await Prediction.findAll({
+    where: {
+      area_id: { [Op.in]: areaIds },
+    },
+    attributes: ['id', 'area_id', 'prediction_text', 'createdAt'],
+    order: [['id', 'DESC']],
+  });
+
+  const predictionMap = {};
+  allPredictions.forEach((prediction) => {
+    if (!predictionMap[prediction.area_id]) {
+      predictionMap[prediction.area_id] = {
+        id: prediction.id,
+        prediction_text: prediction.prediction_text,
+        createdAt: prediction.createdAt,
+      };
+    }
+  });
+
+  return areas.map((area) => {
+    const areaData = typeof area.toJSON === 'function' ? area.toJSON() : area;
+    areaData.latestPrediction = predictionMap[area.id] || null;
+    return areaData;
+  });
+};
+
 exports.getAllAreas = async (req, res) => {
   try {
     const {
@@ -32,9 +174,6 @@ exports.getAllAreas = async (req, res) => {
       long_max,
       limit = 10,
       offset = 0,
-      role,
-      district,
-      province,
     } = req.query;
     logger.debug('Get All Areas - Request query', req.query);
 
@@ -67,20 +206,8 @@ exports.getAllAreas = async (req, res) => {
       if (long_max) query.longitude[Op.lte] = long_max; // Less than or equal to long_max
     }
 
-    // Filter by province and district if provided (for all users)
-    if (province) {
-      query.province = province; // UUID
-    }
-    if (district) {
-      query.district = district; // UUID
-    }
+    query = applyScopedQuery(query, req);
 
-    // Manager-specific filter: if manager doesn't provide filter, apply their default scope
-    if (role === 'manager' && !province && !district) {
-      logger.debug('Manager role detected, applying default district/province filter');
-      // Manager filter logic is handled by user's province/district from token
-      // This is already handled in the query params passed from frontend
-    }
     logger.debug('Query for Areas', { query });
     const options = {
       where: query,
@@ -112,37 +239,20 @@ exports.getAllAreas = async (req, res) => {
     const total = await Area.count(options);
     res.status(200).json({ areas: areas, total: total });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get All Areas Error:', {
       message: error.message,
       stack: error.stack,
       query: req.query,
     });
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to fetch areas.' });
   }
 };
 
 // Stats for areas: total count and distribution by province (for charts)
 exports.getAreaStats = async (req, res) => {
   try {
-    const {
-      role,
-      district,
-      province,
-    } = req.query;
-
-    let where = {};
-
-    // Admin sees all areas, no filter
-    // Manager only sees areas within their province/district
-    if (role === 'manager') {
-      if (district) {
-        where.district = district;
-      } else if (province) {
-        where.province = province;
-      }
-      // If manager doesn't provide filters, they should still be scoped (handled by frontend)
-    }
-    // For admin or other roles, where remains empty = all areas
+    const where = applyScopedQuery({}, req);
 
     // Total areas with current scope
     const totalAreas = await Area.count({ where });
@@ -177,30 +287,20 @@ exports.getAreaStats = async (req, res) => {
       byProvince,
     });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Area Stats Error:', {
       message: error.message,
       stack: error.stack,
       query: req.query,
     });
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Failed to fetch area statistics.' });
   }
 };
 
 // Stats for areas by type (oyster, cobia) - for pie/treemap charts
 exports.getAreaStatsByType = async (req, res) => {
   try {
-    const { role, district, province } = req.query;
-
-    let where = {};
-
-    // Manager only sees areas within their province/district
-    if (role === 'manager') {
-      if (district) {
-        where.district = district;
-      } else if (province) {
-        where.province = province;
-      }
-    }
+    const where = applyScopedQuery({}, req);
 
     // Distribution by area_type
     const distributionRaw = await Area.findAll({
@@ -226,29 +326,20 @@ exports.getAreaStatsByType = async (req, res) => {
       byType,
     });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Area Stats By Type Error:', {
       message: error.message,
       stack: error.stack,
       query: req.query,
     });
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Failed to fetch area statistics.' });
   }
 };
 
 // Combined stats: by type AND by province (for detailed analysis)
 exports.getAreaStatsCombined = async (req, res) => {
   try {
-    const { role, district, province } = req.query;
-
-    let where = {};
-
-    if (role === 'manager') {
-      if (district) {
-        where.district = district;
-      } else if (province) {
-        where.province = province;
-      }
-    }
+    const where = applyScopedQuery({}, req);
 
     // Total
     const totalAreas = await Area.count({ where });
@@ -329,19 +420,20 @@ exports.getAreaStatsCombined = async (req, res) => {
       byTypePerProvince,
     });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Area Stats Combined Error:', {
       message: error.message,
       stack: error.stack,
       query: req.query,
     });
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Failed to fetch area statistics.' });
   }
 };
 
 // Get all areas without pagination (for dropdowns, selects, etc.)
 exports.getAllAreasNoPagination = async (req, res) => {
   try {
-    const { search, area_type, lat_min, lat_max, long_min, long_max, province, district, include_prediction } = req.query;
+    const { search, area_type, lat_min, lat_max, long_min, long_max, include_prediction } = req.query;
     logger.debug('Get All Areas (No Pagination) - Request query', req.query);
 
     let query = {};
@@ -363,12 +455,7 @@ exports.getAllAreasNoPagination = async (req, res) => {
         [Op.between]: [parseFloat(long_min), parseFloat(long_max)],
       };
     }
-    if (province) {
-      query.province = province;
-    }
-    if (district) {
-      query.district = district;
-    }
+    query = applyScopedQuery(query, req);
 
     const includes = [
       {
@@ -429,62 +516,163 @@ exports.getAllAreasNoPagination = async (req, res) => {
 
     res.status(200).json({ areas: areas });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get All Areas (No Pagination) Error:', {
       message: error.message,
       stack: error.stack,
       query: req.query,
     });
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to fetch areas.' });
   }
 };
 
 exports.getAreaById = async (req, res) => {
   try {
     const { id } = req.params;
+    const validationError = validateAreaIdParam(id);
+    if (validationError) {
+      return res.status(400).json(validationError);
+    }
+
     const area = await Area.findOne({
       where: { id: id },
-      include: {
-        model: Province,
-        as: 'Province',
-        required: false,
-        attributes: ['id', 'name', 'central_meridian'],
-      },
+      include: [
+        {
+          model: Province,
+          as: 'Province',
+          required: false,
+          attributes: ['id', 'name', 'central_meridian'],
+        },
+        {
+          model: District,
+          as: 'District',
+          required: false,
+          attributes: ['id', 'name'],
+        },
+      ],
     });
+    if (!area) {
+      return res.status(404).json({ error: 'Area not found.' });
+    }
+    assertAreaWithinScope(area, req.user);
     res.status(200).json(area);
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Area By ID Error:', {
       message: error.message,
       stack: error.stack,
       areaId: req.params.id,
     });
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to fetch area.' });
+  }
+};
+
+exports.getPublicMapAreas = async (req, res) => {
+  try {
+    const { search, area_type, lat_min, lat_max, long_min, long_max, include_prediction } = req.query;
+
+    const query = {};
+    const searchCondition = buildSearchCondition('Area.name', search);
+    if (searchCondition) {
+      query[Op.and] = query[Op.and] || [];
+      query[Op.and].push(searchCondition);
+    }
+    if (area_type) {
+      query.area_type = area_type;
+    }
+    if (lat_min && lat_max) {
+      query.latitude = {
+        [Op.between]: [parseFloat(lat_min), parseFloat(lat_max)],
+      };
+    }
+    if (long_min && long_max) {
+      query.longitude = {
+        [Op.between]: [parseFloat(long_min), parseFloat(long_max)],
+      };
+    }
+
+    let areas = await Area.findAll({
+      where: query,
+      attributes: PUBLIC_AREA_ATTRIBUTES,
+      include: buildPublicAreaIncludes(),
+      order: [['name', 'ASC']],
+    });
+
+    if (include_prediction === 'true') {
+      areas = await addLatestPredictionSummary(areas);
+    }
+
+    return res.status(200).json({ areas });
+  } catch (error) {
+    logger.error('Get Public Map Areas Error:', {
+      message: error.message,
+      stack: error.stack,
+      query: req.query,
+    });
+    return res.status(500).json({ error: 'Failed to fetch public map areas.' });
+  }
+};
+
+exports.getPublicMapAreaById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const validationError = validateAreaIdParam(id);
+    if (validationError) {
+      return res.status(400).json(validationError);
+    }
+
+    let area = await Area.findOne({
+      where: { id },
+      attributes: PUBLIC_AREA_ATTRIBUTES,
+      include: buildPublicAreaIncludes(),
+    });
+
+    if (!area) {
+      return res.status(404).json({ error: 'Area not found.' });
+    }
+
+    [area] = await addLatestPredictionSummary([area]);
+    return res.status(200).json(area);
+  } catch (error) {
+    logger.error('Get Public Map Area By ID Error:', {
+      message: error.message,
+      stack: error.stack,
+      areaId: req.params.id,
+    });
+    return res.status(500).json({ error: 'Failed to fetch public map area.' });
   }
 };
 
 exports.createArea = async (req, res) => {
   try {
     const { name, latitude, longitude, province, district, area_type } =
-      req.body;
+      req.body || {};
 
-    if (area_type !== 'oyster' && area_type !== 'cobia') {
-      return res.status(400).json({
-        error: 'Invalid area_type. It must be either "oyster" or "cobia".',
-      });
+    const validationError = validateAreaCreateInput({ name, latitude, longitude, area_type });
+    if (validationError) {
+      return res.status(400).json(validationError);
     }
 
+    const writeLocation = await resolveAreaWriteLocation(
+      { province, district },
+      req.user,
+      null,
+      { isCreate: true }
+    );
+
     // Validate province/district relationship
-    if (province) {
-      const provinceObj = await Province.findOne({ where: { id: province } });
+    if (writeLocation.province) {
+      const provinceObj = await Province.findOne({ where: { id: writeLocation.province } });
       if (!provinceObj) {
         return res.status(400).json({ error: 'Province not found' });
       }
     }
-    if (district) {
-      const districtObj = await District.findOne({ where: { id: district } });
+    if (writeLocation.district) {
+      const districtObj = await District.findOne({ where: { id: writeLocation.district } });
       if (!districtObj) {
         return res.status(400).json({ error: 'District not found' });
       }
-      if (province && String(districtObj.province_id) !== String(province)) {
+      if (writeLocation.province && String(districtObj.province_id) !== String(writeLocation.province)) {
         return res
           .status(400)
           .json({ error: 'District does not belong to the selected province' });
@@ -493,10 +681,10 @@ exports.createArea = async (req, res) => {
 
     const newArea = await Area.create({
       name,
-      latitude,
-      longitude,
-      province,
-      district,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      province: writeLocation.province,
+      district: writeLocation.district,
       area: 1000,
       area_type,
     });
@@ -505,23 +693,31 @@ exports.createArea = async (req, res) => {
 
     res.status(201).json(newArea);
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
+    if (handleAreaDataError(res, error)) return;
     logger.error('Create Area Error:', {
       message: error.message,
       stack: error.stack,
       areaData: req.body,
     });
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to create area.' });
   }
 };
 
 exports.deleteArea = async (req, res) => {
   try {
     const { id } = req.params;
+    const validationError = validateAreaIdParam(id);
+    if (validationError) {
+      return res.status(400).json(validationError);
+    }
+
     const area = await Area.findOne({ where: { id } });
 
     if (!area) {
       return res.status(404).json({ error: 'Area not found.' });
     }
+    assertAreaWithinScope(area, req.user);
 
     logger.info('Deleting area', { areaName: area.name, areaId: area.id });
 
@@ -566,12 +762,14 @@ exports.deleteArea = async (req, res) => {
       throw error;
     }
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
+    if (handleAreaDataError(res, error)) return;
     logger.error('Delete Area Error:', {
       message: error.message,
       stack: error.stack,
       areaId: req.params.id,
     });
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to delete area.' });
   }
 };
 
@@ -581,12 +779,16 @@ exports.updateArea = async (req, res) => {
 
     const { id } = req.params;
     const { name, latitude, longitude, province, district, area, area_type } =
-      req.body;
+      req.body || {};
 
-    if (area_type !== 'oyster' && area_type !== 'cobia') {
-      return res.status(400).json({
-        error: 'Invalid area_type. It must be either "oyster" or "cobia".',
-      });
+    const idValidationError = validateAreaIdParam(id);
+    if (idValidationError) {
+      return res.status(400).json(idValidationError);
+    }
+
+    const validationError = validateAreaUpdateInput({ name, latitude, longitude, area, area_type });
+    if (validationError) {
+      return res.status(400).json(validationError);
     }
 
     const selectedArea = await Area.findOne({ where: { id } });
@@ -594,20 +796,23 @@ exports.updateArea = async (req, res) => {
     if (!selectedArea) {
       return res.status(404).json({ error: 'Area not found.' });
     }
+    assertAreaWithinScope(selectedArea, req.user);
+
+    const writeLocation = await resolveAreaWriteLocation({ province, district }, req.user, selectedArea);
 
     // If province/district are being updated, validate the relationship
-    if (province) {
-      const provinceObj = await Province.findOne({ where: { id: province } });
+    if (writeLocation.province) {
+      const provinceObj = await Province.findOne({ where: { id: writeLocation.province } });
       if (!provinceObj) {
         return res.status(400).json({ error: 'Province not found' });
       }
     }
-    if (district) {
-      const districtObj = await District.findOne({ where: { id: district } });
+    if (writeLocation.district) {
+      const districtObj = await District.findOne({ where: { id: writeLocation.district } });
       if (!districtObj) {
         return res.status(400).json({ error: 'District not found' });
       }
-      const effectiveProvince = province || selectedArea.province;
+      const effectiveProvince = writeLocation.province || selectedArea.province;
       if (effectiveProvince && String(districtObj.province_id) !== String(effectiveProvince)) {
         return res
           .status(400)
@@ -615,13 +820,13 @@ exports.updateArea = async (req, res) => {
       }
     }
 
-    selectedArea.name = name || selectedArea.name;
-    selectedArea.latitude = latitude || selectedArea.latitude;
-    selectedArea.longitude = longitude || selectedArea.longitude;
-    selectedArea.area = area || selectedArea.area;
-    selectedArea.province = province || selectedArea.province;
-    selectedArea.district = district || selectedArea.district;
-    selectedArea.area_type = area_type;
+    selectedArea.name = name !== undefined ? name : selectedArea.name;
+    selectedArea.latitude = latitude !== undefined ? Number(latitude) : selectedArea.latitude;
+    selectedArea.longitude = longitude !== undefined ? Number(longitude) : selectedArea.longitude;
+    selectedArea.area = area !== undefined ? Number(area) : selectedArea.area;
+    selectedArea.province = writeLocation.province || selectedArea.province;
+    selectedArea.district = writeLocation.district || selectedArea.district;
+    selectedArea.area_type = area_type !== undefined ? area_type : selectedArea.area_type;
 
     logger.info('Updating area', { areaName: selectedArea.name, areaId: selectedArea.id });
     await selectedArea.save();
@@ -630,12 +835,14 @@ exports.updateArea = async (req, res) => {
 
     res.status(200).json(selectedArea);
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
+    if (handleAreaDataError(res, error)) return;
     logger.error('Update Area Error:', {
       message: error.message,
       stack: error.stack,
       areaId: req.params.id,
       updateData: req.body,
     });
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to update area.' });
   }
 };

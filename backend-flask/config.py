@@ -172,3 +172,11 @@ FETCH_SECRET_KEY = 'your-very-secret-and-random-string-12345'
 # Thay thế bằng thông tin đăng nhập Copernicus của bạn
 COPERNICUS_USERNAME = 'nghiem.eo.bua.18@gmail.com'
 COPERNICUS_PASSWORD = 'Quenmatroi1!'
+
+TRUSTED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    'flask_backend',
+    'flask_backend:5001',
+    'quanlytainguyen.tbu.edu.vn',
+]

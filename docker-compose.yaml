@@ -26,24 +26,27 @@ services:
   express_backend:
     build: ./backend-express
     container_name: express_backend
-    env_file:
-      - ./backend-express/.env
     networks:
       - proxy_network
     restart: always
     ports:
       - "5000:5000"
     environment:
+      - APP_ENV=production
       - NODE_ENV=production
-      - BACKEND_URL=http://113.160.200.14/quanlytainguyen/api/express
-      - FRONTEND_URL=http://113.160.200.14/quanlytainguyen
+      - PORT=5000
+      - BACKEND_URL=https://quanlytainguyen.tbu.edu.vn/quanlytainguyen/api/express
+      - FRONTEND_URL=https://quanlytainguyen.tbu.edu.vn
+      - GOOGLE_REDIRECT_URI=https://quanlytainguyen.tbu.edu.vn/quanlytainguyen/api/express/google/callback
+      - SWAGGER_MODE=admin
+      - CORS_ALLOWED_ORIGINS=https://quanlytainguyen.tbu.edu.vn
       - DB_HOST=postgres_db
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=admin
       - DB_NAME=ocean
       - FLASK_API_URL=http://flask_backend:5001
-      - FLASK_INTERNAL_HOST_HEADER=localhost:5001
+      - FLASK_BASE_URL=http://flask_backend:5001
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -57,12 +60,12 @@ services:
     ports:
       - "5001:5001"
     environment:
-      - FLASK_TRUSTED_HOSTS=localhost,localhost:5001,127.0.0.1,127.0.0.1:5001,flask_backend,flask_backend:5001
+      - STATION_FORECAST_ENABLED=false
   frontend:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=http://113.160.200.14/quanlytainguyen/
+        VITE_BUILD_MODE: production
     container_name: frontend
     networks:
       - proxy_network

@@ -2,6 +2,7 @@ const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../config/logger');
+const { GOOGLE_REDIRECT_URI } = require('../config/publicUrls');
 
 /**
  * Google Drive Service for uploading ML model files
@@ -36,7 +37,7 @@ class GoogleDriveService {
 
       const clientId = process.env.GOOGLE_CLIENT_ID;
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/express/google/callback';
+      const redirectUri = GOOGLE_REDIRECT_URI;
 
       console.log('Client ID exists:', !!clientId);
       console.log('Client Secret exists:', !!clientSecret);

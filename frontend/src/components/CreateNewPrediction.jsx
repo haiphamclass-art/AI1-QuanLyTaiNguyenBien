@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { jwtDecode } from 'jwt-decode';
+﻿import React, { useState, useEffect } from 'react';
 import axios from '../axios';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
@@ -21,14 +20,22 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const { Option } = Select;
 const { Title } = Typography;
 
+const getApiErrorMessage = (error, fallbackMessage) => {
+  return (
+    error?.response?.data?.error ||
+    error?.response?.data?.message ||
+    error?.message ||
+    fallbackMessage
+  );
+};
+
 const CreateNewPrediction = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   const [userId, setUserId] = useState(null);
   const [areas, setAreas] = useState([]);
-  const [region, setRegion] = useState('');
   const [selectedAreaId, setSelectedAreaId] = useState('');
   const [areaType, setAreaType] = useState('');
   const [modelName, setModelName] = useState('');
@@ -45,23 +52,6 @@ const CreateNewPrediction = () => {
   const [isSingleLoading, setIsSingleLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
   const [allModels, setAllModels] = useState([]);
-
-  const getApiErrorMessage = (error, fallback = 'Request failed') => {
-    const payload = error?.response?.data;
-    const details = payload?.details;
-    const missingFields = Array.isArray(details?.missing_fields)
-      ? details.missing_fields.join(', ')
-      : null;
-
-    const baseMessage =
-      (typeof payload === 'string' && payload) ||
-      payload?.error ||
-      payload?.message ||
-      error?.message ||
-      fallback;
-
-    return missingFields ? `${baseMessage}: ${missingFields}` : baseMessage;
-  };
 
   // Fetch available ML models with their nature elements
   useEffect(() => {
@@ -86,7 +76,6 @@ const CreateNewPrediction = () => {
         setAllModels(modelsWithFiles);
       } catch (error) {
         console.error('Error fetching models:', error);
-        return message.error(getApiErrorMessage(error, 'Khong the tai danh sach model'));
         message.error('Không thể tải danh sách model');
       }
     };
@@ -123,33 +112,22 @@ const CreateNewPrediction = () => {
   };
 
   useEffect(() => {
-    if (token) {
-      try {
-        const decodedToken = jwtDecode(token);
-        setUserId(decodedToken.id);
-        setRegion(decodedToken.region);
-      } catch (error) {
-        console.error('Error decoding token:', error);
-        message.error('Invalid token. Please log in again.');
-      }
+    if (user?.id) {
+      setUserId(user.id);
     }
-  }, [token]);
+  }, [user]);
 
   useEffect(() => {
     const fetchAreas = async () => {
       try {
         const response = await axios.get('api/express/areas/all');
-        const decodedToken = jwtDecode(token);
-        const areaList = response.data.areas.filter(
-          (area) => area.region === decodedToken.region
-        );
-        setAreas(areaList);
+        setAreas(response.data.areas || []);
       } catch (error) {
-        return message.error(getApiErrorMessage(error, 'Khong the tai danh sach khu vuc'));
+        message.error('Error fetching areas:', error);
       }
     };
     fetchAreas();
-  }, [token]);
+  }, []);
 
   // Check for areaId in query params to auto-select area
   useEffect(() => {
@@ -174,7 +152,6 @@ const CreateNewPrediction = () => {
           singleForm.setFieldsValue({ areaId: areaData.id });
         } catch (error) {
           console.error('Error fetching area:', error);
-          return message.error(getApiErrorMessage(error, 'Khong the tai thong tin khu vuc'));
           message.error('Không thể tải thông tin khu vực');
         }
       };
@@ -225,25 +202,12 @@ const CreateNewPrediction = () => {
         throw new Error('You need to select area and model');
 
       setBatchProgress(20);
-      const headers = csvElements[0]
-        .split(',')
-        .map((header) => header.trim().replace(/^\uFEFF/, ''));
+      const headers = csvElements[0].split(',');
       const data = csvElements.slice(1).map((line) => {
         const parts = line.split(',');
         const obj = {};
         for (let i = 0; i < headers.length; i++) {
-          const key = headers[i];
-          const rawValue = (parts[i] ?? '')
-            .trim()
-            .replace(/^"(.*)"$/, '$1');
-
-          if (key === 'createdAt') {
-            obj[key] = rawValue;
-            continue;
-          }
-
-          const numericValue = Number(rawValue);
-          obj[key] = rawValue !== '' && Number.isFinite(numericValue) ? numericValue : rawValue;
+          obj[headers[i]] = parseFloat(parts[i]);
         }
         console.log('data', obj);
 
@@ -265,7 +229,7 @@ const CreateNewPrediction = () => {
       setCsvElements([]);
       navigate('/dashboard');
     } catch (error) {
-      return message.error(getApiErrorMessage(error, 'Khong the tao du doan hang loat'));
+      message.error(getApiErrorMessage(error, 'Không thể tạo dự đoán từ file CSV'));
     } finally {
       setIsBatchLoading(false);
       setBatchProgress(0);
@@ -295,14 +259,14 @@ const CreateNewPrediction = () => {
 
       setBatchProgress(100);
       const { message: responseMessage, redirect } = response.data || {};
-      message.success(responseMessage || 'Vui lòng đợi trong khi hệ thống đang xử lý và tạo dự đoán mới.');
+      message.success(responseMessage || 'Vui lòng đợi trong khi hệ thống đang xử lý và tạo dự đoán mới. Bạn có thể theo dõi tiến trình tại trang Jobs.');
       batchForm.resetFields();
       setExcelFile(null);
       setTimeout(() => {
         navigate(redirect || '/jobs');
       }, 1500);
     } catch (error) {
-      return message.error(getApiErrorMessage(error, 'Khong the xu ly file Excel'));
+      message.error(getApiErrorMessage(error, 'Không thể tạo dự đoán từ file Excel'));
     } finally {
       setIsBatchLoading(false);
       setBatchProgress(0);
@@ -329,14 +293,14 @@ const CreateNewPrediction = () => {
 
       setBatchProgress(100);
       const { message: responseMessage, redirect } = response.data || {};
-      message.success(responseMessage || 'Vui lòng đợi trong khi hệ thống đang xử lý và tạo dự đoán mới.');
+      message.success(responseMessage || 'Vui lòng đợi trong khi hệ thống đang xử lý và tạo dự đoán mới. Bạn có thể theo dõi tiến trình tại trang Jobs.');
       batchForm.resetFields();
       setExcelFile2(null);
       setTimeout(() => {
         navigate(redirect || '/jobs');
       }, 1500);
     } catch (error) {
-      return message.error(getApiErrorMessage(error, 'Khong the xu ly file Excel'));
+      message.error(getApiErrorMessage(error, 'Không thể tạo dự đoán từ file Excel'));
     } finally {
       setIsBatchLoading(false);
       setBatchProgress(0);
@@ -357,7 +321,7 @@ const CreateNewPrediction = () => {
       singleForm.resetFields();
       navigate('/dashboard');
     } catch (e) {
-      return message.error(getApiErrorMessage(e, 'Khong the tao du doan'));
+      message.error(getApiErrorMessage(e, 'Không thể tạo dự đoán'));
     } finally {
       setIsSingleLoading(false);
     }
@@ -481,7 +445,7 @@ const CreateNewPrediction = () => {
                           rules={[
                             { 
                               required: element.ModelNatureElement?.is_required ?? true, 
-                              message: `${element.name} là bắt buộc` 
+                              message: `${element.name} là bắt buộc`
                             },
                           ]}
                           extra={element.description}

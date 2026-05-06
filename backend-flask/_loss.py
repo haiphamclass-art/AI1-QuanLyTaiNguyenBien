@@ -1,63 +1,69 @@
-"""Compatibility shim for legacy scikit-learn pickle references."""
+"""
+Compatibility shim for older scikit-learn pickles that import `_loss` directly.
+
+Older pickles may reference private Cython helpers such as
+`__pyx_unpickle_CyHalfSquaredError`. Wildcard imports skip those names, so we
+copy attributes explicitly from the current scikit-learn modules.
+"""
 
 from importlib import import_module
-
 import numpy as np
 
 
-def _copy_module_symbols(module_name):
+_SKIP_NAMES = {
+    "__builtins__",
+    "__cached__",
+    "__doc__",
+    "__file__",
+    "__loader__",
+    "__name__",
+    "__package__",
+    "__spec__",
+}
+
+
+def _export_module(module_name):
     module = import_module(module_name)
     for name in dir(module):
-        if name.startswith("__") and not name.startswith("__pyx_unpickle_"):
+        if name in _SKIP_NAMES:
             continue
         globals()[name] = getattr(module, name)
 
 
-for _module_name in ("sklearn._loss._loss", "sklearn._loss.loss"):
-    _copy_module_symbols(_module_name)
+_export_module("sklearn._loss._loss")
+_export_module("sklearn._loss.loss")
+_export_module("sklearn._loss.link")
 
 
-def _patched_get_init_raw_predictions(self, *args, **kwargs):
-    estimator = kwargs.get("estimator")
-    X = kwargs.get("X")
+def _patch_loss_compat():
+    # scikit-learn 1.5.x regression pickles expect this method on loss objects
+    # when GradientBoostingRegressor computes initial raw predictions.
+    def _get_init_raw_predictions(self, X, estimator):
+        predictions = estimator.predict(X)
+        predictions = np.asarray(predictions)
+        if predictions.ndim == 1:
+            predictions = predictions.reshape(-1, 1)
+        return predictions.astype(np.float64, copy=False)
 
-    if estimator is None:
-        estimator = next((arg for arg in args if hasattr(arg, "predict")), None)
-
-    if X is None:
-        for arg in args:
-            if arg is estimator:
-                continue
-            if hasattr(arg, "shape") or hasattr(arg, "__array__") or hasattr(arg, "__len__"):
-                X = arg
-                break
-
-    if estimator is None or X is None:
-        raise TypeError("Could not infer estimator and feature matrix for get_init_raw_predictions")
-
-    raw_predictions = np.asarray(estimator.predict(X), dtype=np.float64)
-    if raw_predictions.ndim == 1:
-        raw_predictions = raw_predictions.reshape(-1, 1)
-    return raw_predictions
-
-
-for _class_name in (
-    "BaseLoss",
-    "HalfSquaredError",
-    "AbsoluteError",
-    "HuberLoss",
-    "PinballLoss",
-    "HalfPoissonLoss",
-    "HalfGammaLoss",
-    "HalfTweedieLoss",
-):
-    _class = globals().get(_class_name)
-    if _class is not None and not hasattr(_class, "get_init_raw_predictions"):
-        _class.get_init_raw_predictions = _patched_get_init_raw_predictions
+    for loss_name in (
+        "BaseLoss",
+        "HalfSquaredError",
+        "AbsoluteError",
+        "PinballLoss",
+        "HuberLoss",
+        "HalfPoissonLoss",
+        "HalfGammaLoss",
+        "HalfTweedieLoss",
+        "HalfTweedieLossIdentity",
+    ):
+        loss_cls = globals().get(loss_name)
+        if loss_cls is not None and not hasattr(loss_cls, "get_init_raw_predictions"):
+            setattr(loss_cls, "get_init_raw_predictions", _get_init_raw_predictions)
 
 
-__all__ = sorted(
-    name
-    for name in globals()
-    if not name.startswith("__") or name.startswith("__pyx_unpickle_")
-)
+_patch_loss_compat()
+
+__all__ = [
+    name for name in globals()
+    if not name.startswith("_") or name.startswith("__pyx_")
+]

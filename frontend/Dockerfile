@@ -3,8 +3,7 @@ FROM node:23 AS build
 
 WORKDIR /app
 
-ARG VITE_API_URL=http://113.160.200.14/quanlytainguyen/
-ENV VITE_API_URL=${VITE_API_URL}
+ARG VITE_BUILD_MODE=production
 
 # Copy package.json and package-lock.json (or yarn.lock if using yarn)
 COPY package*.json ./
@@ -16,7 +15,7 @@ RUN npm install
 COPY . .
 
 # Build the app
-RUN npm run build && ls -R /app
+RUN npm run build -- --mode ${VITE_BUILD_MODE} && ls -R /app
 
 
 # Step 2: Serve the app using Nginx

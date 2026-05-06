@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { jwtDecode } from 'jwt-decode';
 import axios from '../axios';
 import { useTranslation } from 'react-i18next';
 import {
@@ -603,7 +602,7 @@ const LineChartComponent = ({ data, granularity = 'day' }) => {
 
 const AdminStats = () => {
     const { t } = useTranslation();
-    const { token } = useSelector((state) => state.auth);
+    const { user } = useSelector((state) => state.auth);
 
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
@@ -629,14 +628,7 @@ const AdminStats = () => {
     const fetchingRef = useRef(false);
     const predictionFetchingRef = useRef(false);
 
-    const decoded = useMemo(() => {
-        if (!token) return null;
-        try {
-            return jwtDecode(token);
-        } catch (e) {
-            return null;
-        }
-    }, [token]);
+    const decoded = useMemo(() => user || null, [user]);
 
     useEffect(() => {
         if (!decoded) {

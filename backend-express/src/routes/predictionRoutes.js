@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const {
   createPrediction,
   getLatestPrediction,
@@ -32,7 +32,7 @@ const router = express.Router();
  *     summary: Create batch predictions
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -84,7 +84,7 @@ router.post(
  *     summary: Delete multiple predictions by IDs
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -144,7 +144,7 @@ router.delete(
  *     summary: Upload Excel file for batch predictions
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -200,7 +200,7 @@ router.post('/excel', authenticate, authorize(['expert']), upload.single('file')
     fs.writeFileSync(filePath, req.file.buffer);
 
     const jobData = { path: filePath, originalname: req.file.originalname, userId: callerId, areaId, modelName };
-    logger.info('[API] Enqueueing Excel import job (Mẫu 1)', { userId: callerId, areaId, modelName, file: req.file.originalname, size: req.file.size });
+    logger.info('[API] Enqueueing Excel import job (MÃ¡ÂºÂ«u 1)', { userId: callerId, areaId, modelName, file: req.file.originalname, size: req.file.size });
     logger.debug('[API] Job data', jobData);
 
     const jobId = await boss.send('xlsx-import', jobData, { retryLimit: 0 });
@@ -243,7 +243,7 @@ router.post('/excel2', authenticate, authorize(['expert']), upload.single('file'
     fs.writeFileSync(filePath, req.file.buffer);
 
     const jobData = { path: filePath, originalname: req.file.originalname, userId: callerId, modelName, template: 'excel2' };
-    logger.info('[API] Enqueueing Excel import job (Mẫu 2)', { userId: callerId, modelName, file: req.file.originalname, size: req.file.size });
+    logger.info('[API] Enqueueing Excel import job (MÃ¡ÂºÂ«u 2)', { userId: callerId, modelName, file: req.file.originalname, size: req.file.size });
     logger.debug('[API] Job data', jobData);
 
     const jobId = await boss.send('xlsx-import', jobData, { retryLimit: 0 });
@@ -253,14 +253,14 @@ router.post('/excel2', authenticate, authorize(['expert']), upload.single('file'
       return res.status(500).json({ error: 'failed_to_get_job_id' });
     }
 
-    logger.info('[API] Excel import job (Mẫu 2) enqueued successfully', { jobId, file: req.file.originalname });
+    logger.info('[API] Excel import job (MÃ¡ÂºÂ«u 2) enqueued successfully', { jobId, file: req.file.originalname });
     return res.json({
       jobId,
       message: 'Vui lòng đợi trong khi hệ thống đang xử lý và tạo dự đoán mới. Bạn có thể theo dõi tiến trình tại trang Jobs.',
       redirect: '/jobs'
     });
   } catch (e) {
-    logger.error('[API] Failed to enqueue Excel import job (Mẫu 2)', { error: e.message, stack: e.stack });
+    logger.error('[API] Failed to enqueue Excel import job (MÃ¡ÂºÂ«u 2)', { error: e.message, stack: e.stack });
     return res.status(500).json({ error: 'failed_to_queue', message: e.message });
   }
 });
@@ -359,7 +359,7 @@ router.post(
  *     summary: Export predictions to Excel (Admin/Manager only)
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: areaId
@@ -434,7 +434,7 @@ router.get(
  *     summary: Get all predictions with filters (Admin/Manager only)
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -519,7 +519,7 @@ router.get(
      *                             example: 1
      *                           name:
      *                             type: string
-     *                             example: "Khu vực nuôi hàu A"
+     *                             example: "Khu vÃ¡Â»Â±c nuÃƒÂ´i hÃƒÂ u A"
      *                 count:
      *                   type: integer
      *                   description: Total number of predictions
@@ -537,7 +537,7 @@ router.get(
      *                       updatedAt: "2024-01-01T00:00:00Z"
      *                       Area:
      *                         id: 1
-     *                         name: "Khu vực nuôi hàu A"
+     *                         name: "Khu vÃ¡Â»Â±c nuÃƒÂ´i hÃƒÂ u A"
      *                     - id: 2
      *                       area_id: 2
      *                       user_id: 1
@@ -546,7 +546,7 @@ router.get(
      *                       updatedAt: "2024-01-01T00:00:00Z"
      *                       Area:
      *                         id: 2
-     *                         name: "Khu vực nuôi cá cobia B"
+     *                         name: "Khu vÃ¡Â»Â±c nuÃƒÂ´i cÃƒÂ¡ cobia B"
      *                   count: 15
      *       401:
      *         description: Unauthorized
@@ -630,7 +630,7 @@ router.get('/:areaId/history', getPredictionHistory);
  *     summary: Get prediction details by ID
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: predictionId
@@ -666,7 +666,7 @@ router.get(
  *     summary: Get predictions by user ID (Expert only)
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: userId
@@ -821,7 +821,7 @@ router.get(
  * @swagger
  * /predictions/stats/latest-ratio:
  *   get:
- *     summary: Tỷ lệ kết quả dự đoán mới nhất của mỗi vùng (Tốt/TB/Kém)
+ *     summary: TÃ¡Â»Â· lÃ¡Â»â€¡ kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t cÃ¡Â»Â§a mÃ¡Â»â€”i vÃƒÂ¹ng (TÃ¡Â»â€˜t/TB/KÃƒÂ©m)
  *     tags: [Predictions]
  *     parameters:
  *       - in: query
@@ -829,11 +829,11 @@ router.get(
  *         schema:
  *           type: string
  *           format: date
- *         description: Xem thống kê tại thời điểm cụ thể (YYYY-MM-DD)
+ *         description: Xem thÃ¡Â»â€˜ng kÃƒÂª tÃ¡ÂºÂ¡i thÃ¡Â»Âi Ã„â€˜iÃ¡Â»Æ’m cÃ¡Â»Â¥ thÃ¡Â»Æ’ (YYYY-MM-DD)
  *         example: "2025-06-30"
  *     responses:
  *       200:
- *         description: Thống kê tỷ lệ dự đoán mới nhất
+ *         description: ThÃ¡Â»â€˜ng kÃƒÂª tÃ¡Â»Â· lÃ¡Â»â€¡ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t
  *         content:
  *           application/json:
  *             schema:
@@ -841,16 +841,16 @@ router.get(
  *               properties:
  *                 good:
  *                   type: integer
- *                   description: Số vùng có kết quả Tốt
+ *                   description: SÃ¡Â»â€˜ vÃƒÂ¹ng cÃƒÂ³ kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ TÃ¡Â»â€˜t
  *                 average:
  *                   type: integer
- *                   description: Số vùng có kết quả Trung bình
+ *                   description: SÃ¡Â»â€˜ vÃƒÂ¹ng cÃƒÂ³ kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ Trung bÃƒÂ¬nh
  *                 poor:
  *                   type: integer
- *                   description: Số vùng có kết quả Kém
+ *                   description: SÃ¡Â»â€˜ vÃƒÂ¹ng cÃƒÂ³ kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ KÃƒÂ©m
  *                 totalAreas:
  *                   type: integer
- *                   description: Tổng số vùng có dự đoán
+ *                   description: TÃ¡Â»â€¢ng sÃ¡Â»â€˜ vÃƒÂ¹ng cÃƒÂ³ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n
  *             example:
  *               good: 15
  *               average: 8
@@ -868,25 +868,25 @@ router.get(
  * @swagger
  * /predictions/stats/comparison:
  *   get:
- *     summary: So sánh kết quả đợt dự đoán mới nhất với đợt trước
+ *     summary: So sÃƒÂ¡nh kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ Ã„â€˜Ã¡Â»Â£t dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t vÃ¡Â»â€ºi Ã„â€˜Ã¡Â»Â£t trÃ†Â°Ã¡Â»â€ºc
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     description: |
- *       So sánh kết quả dự đoán giữa đợt mới nhất và đợt trước đó của mỗi vùng.
- *       - Đợt mới nhất = prediction mới nhất của mỗi area
- *       - Đợt trước = prediction mới nhất - 1 của mỗi area
+ *       So sÃƒÂ¡nh kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n giÃ¡Â»Â¯a Ã„â€˜Ã¡Â»Â£t mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t vÃƒÂ  Ã„â€˜Ã¡Â»Â£t trÃ†Â°Ã¡Â»â€ºc Ã„â€˜ÃƒÂ³ cÃ¡Â»Â§a mÃ¡Â»â€”i vÃƒÂ¹ng.
+ *       - Ã„ÂÃ¡Â»Â£t mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t = prediction mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t cÃ¡Â»Â§a mÃ¡Â»â€”i area
+ *       - Ã„ÂÃ¡Â»Â£t trÃ†Â°Ã¡Â»â€ºc = prediction mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t - 1 cÃ¡Â»Â§a mÃ¡Â»â€”i area
  *     parameters:
  *       - in: query
  *         name: beforeDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Xem so sánh tại thời điểm cụ thể
+ *         description: Xem so sÃƒÂ¡nh tÃ¡ÂºÂ¡i thÃ¡Â»Âi Ã„â€˜iÃ¡Â»Æ’m cÃ¡Â»Â¥ thÃ¡Â»Æ’
  *         example: "2025-06-30"
  *     responses:
  *       200:
- *         description: Kết quả so sánh giữa 2 đợt
+ *         description: KÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ so sÃƒÂ¡nh giÃ¡Â»Â¯a 2 Ã„â€˜Ã¡Â»Â£t
  *         content:
  *           application/json:
  *             schema:
@@ -910,23 +910,23 @@ router.get(
  *               details:
  *                 improved:
  *                   - areaId: 5
- *                     areaName: "Vùng nuôi hàu A"
+ *                     areaName: "VÃƒÂ¹ng nuÃƒÂ´i hÃƒÂ u A"
  *                     areaType: "oyster"
- *                     province: "Ninh Bình"
- *                     district: "Kim Sơn"
+ *                     province: "Ninh BÃƒÂ¬nh"
+ *                     district: "Kim SÃ†Â¡n"
  *                     from: -1
  *                     to: 0
- *                     fromText: "Kém"
- *                     toText: "Trung bình"
+ *                     fromText: "KÃƒÂ©m"
+ *                     toText: "Trung bÃƒÂ¬nh"
  *                 worsened:
  *                   - areaId: 12
- *                     areaName: "Vùng nuôi cá B"
+ *                     areaName: "VÃƒÂ¹ng nuÃƒÂ´i cÃƒÂ¡ B"
  *                     areaType: "cobia"
- *                     province: "Quảng Ninh"
+ *                     province: "QuÃ¡ÂºÂ£ng Ninh"
  *                     from: 1
  *                     to: 0
- *                     fromText: "Tốt"
- *                     toText: "Trung bình"
+ *                     fromText: "TÃ¡Â»â€˜t"
+ *                     toText: "Trung bÃƒÂ¬nh"
  */
 router.get(
   '/stats/comparison',
@@ -939,30 +939,30 @@ router.get(
  * @swagger
  * /predictions/stats/consecutive-poor:
  *   get:
- *     summary: Cảnh báo vùng có kết quả KÉM liên tiếp
+ *     summary: CÃ¡ÂºÂ£nh bÃƒÂ¡o vÃƒÂ¹ng cÃƒÂ³ kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ KÃƒâ€°M liÃƒÂªn tiÃ¡ÂºÂ¿p
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     description: |
- *       Danh sách các vùng có kết quả Kém liên tiếp nhiều đợt.
- *       Dùng để cảnh báo các vùng cần được chú ý đặc biệt.
+ *       Danh sÃƒÂ¡ch cÃƒÂ¡c vÃƒÂ¹ng cÃƒÂ³ kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ KÃƒÂ©m liÃƒÂªn tiÃ¡ÂºÂ¿p nhiÃ¡Â»Âu Ã„â€˜Ã¡Â»Â£t.
+ *       DÃƒÂ¹ng Ã„â€˜Ã¡Â»Æ’ cÃ¡ÂºÂ£nh bÃƒÂ¡o cÃƒÂ¡c vÃƒÂ¹ng cÃ¡ÂºÂ§n Ã„â€˜Ã†Â°Ã¡Â»Â£c chÃƒÂº ÃƒÂ½ Ã„â€˜Ã¡ÂºÂ·c biÃ¡Â»â€¡t.
  *     parameters:
  *       - in: query
  *         name: minConsecutive
  *         schema:
  *           type: integer
  *           default: 2
- *         description: Số đợt xấu liên tiếp tối thiểu để cảnh báo
+ *         description: SÃ¡Â»â€˜ Ã„â€˜Ã¡Â»Â£t xÃ¡ÂºÂ¥u liÃƒÂªn tiÃ¡ÂºÂ¿p tÃ¡Â»â€˜i thiÃ¡Â»Æ’u Ã„â€˜Ã¡Â»Æ’ cÃ¡ÂºÂ£nh bÃƒÂ¡o
  *         example: 2
  *       - in: query
  *         name: beforeDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Xem cảnh báo tại thời điểm cụ thể
+ *         description: Xem cÃ¡ÂºÂ£nh bÃƒÂ¡o tÃ¡ÂºÂ¡i thÃ¡Â»Âi Ã„â€˜iÃ¡Â»Æ’m cÃ¡Â»Â¥ thÃ¡Â»Æ’
  *     responses:
  *       200:
- *         description: Danh sách vùng xấu liên tiếp
+ *         description: Danh sÃƒÂ¡ch vÃƒÂ¹ng xÃ¡ÂºÂ¥u liÃƒÂªn tiÃ¡ÂºÂ¿p
  *         content:
  *           application/json:
  *             schema:
@@ -972,11 +972,11 @@ router.get(
  *               minConsecutive: 2
  *               areas:
  *                 - areaId: 7
- *                   areaName: "Vùng nuôi hàu C"
+ *                   areaName: "VÃƒÂ¹ng nuÃƒÂ´i hÃƒÂ u C"
  *                   areaType: "oyster"
- *                   areaTypeName: "Hàu"
- *                   province: "Ninh Bình"
- *                   district: "Kim Sơn"
+ *                   areaTypeName: "HÃƒÂ u"
+ *                   province: "Ninh BÃƒÂ¬nh"
+ *                   district: "Kim SÃ†Â¡n"
  *                   consecutiveCount: 4
  *                   lastPredictionDate: "2025-12-01T10:30:00.000Z"
  *                   predictions:
@@ -987,10 +987,10 @@ router.get(
  *                       date: "2025-09-15T08:00:00.000Z"
  *                       result: -1
  *                 - areaId: 15
- *                   areaName: "Vùng nuôi cá D"
+ *                   areaName: "VÃƒÂ¹ng nuÃƒÂ´i cÃƒÂ¡ D"
  *                   areaType: "cobia"
- *                   areaTypeName: "Cá giò"
- *                   province: "Quảng Ninh"
+ *                   areaTypeName: "CÃƒÂ¡ giÃƒÂ²"
+ *                   province: "QuÃ¡ÂºÂ£ng Ninh"
  *                   consecutiveCount: 2
  *                   lastPredictionDate: "2025-11-20T14:00:00.000Z"
  */
@@ -1005,20 +1005,20 @@ router.get(
  * @swagger
  * /predictions/stats/trend-by-batch:
  *   get:
- *     summary: Xu hướng kết quả theo chu kỳ thời gian
+ *     summary: Xu hÃ†Â°Ã¡Â»â€ºng kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ theo chu kÃ¡Â»Â³ thÃ¡Â»Âi gian
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     description: |
- *       Thống kê xu hướng kết quả dự đoán theo chu kỳ (ngày/tuần/tháng/quý).
+ *       ThÃ¡Â»â€˜ng kÃƒÂª xu hÃ†Â°Ã¡Â»â€ºng kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n theo chu kÃ¡Â»Â³ (ngÃƒÂ y/tuÃ¡ÂºÂ§n/thÃƒÂ¡ng/quÃƒÂ½).
  *       
  *       **Logic:**
- *       - Tạo TẤT CẢ các điểm trong khoảng thời gian (vd: 30 ngày gần nhất)
- *       - Nếu có nhiều dự đoán trong 1 chu kỳ → lấy mới nhất
- *       - Nếu không có dự đoán trong chu kỳ → lấy của chu kỳ gần nhất trước đó (carry forward)
+ *       - TÃ¡ÂºÂ¡o TÃ¡ÂºÂ¤T CÃ¡ÂºÂ¢ cÃƒÂ¡c Ã„â€˜iÃ¡Â»Æ’m trong khoÃ¡ÂºÂ£ng thÃ¡Â»Âi gian (vd: 30 ngÃƒÂ y gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t)
+ *       - NÃ¡ÂºÂ¿u cÃƒÂ³ nhiÃ¡Â»Âu dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n trong 1 chu kÃ¡Â»Â³ Ã¢â€ â€™ lÃ¡ÂºÂ¥y mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t
+ *       - NÃ¡ÂºÂ¿u khÃƒÂ´ng cÃƒÂ³ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n trong chu kÃ¡Â»Â³ Ã¢â€ â€™ lÃ¡ÂºÂ¥y cÃ¡Â»Â§a chu kÃ¡Â»Â³ gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t trÃ†Â°Ã¡Â»â€ºc Ã„â€˜ÃƒÂ³ (carry forward)
  *       
- *       **Ví dụ với period=day, limit=7:**
- *       Tạo 7 điểm từ 7 ngày trước đến hôm nay
+ *       **VÃƒÂ­ dÃ¡Â»Â¥ vÃ¡Â»â€ºi period=day, limit=7:**
+ *       TÃ¡ÂºÂ¡o 7 Ã„â€˜iÃ¡Â»Æ’m tÃ¡Â»Â« 7 ngÃƒÂ y trÃ†Â°Ã¡Â»â€ºc Ã„â€˜Ã¡ÂºÂ¿n hÃƒÂ´m nay
  *     parameters:
  *       - in: query
  *         name: period
@@ -1027,35 +1027,35 @@ router.get(
  *           enum: [day, week, month, quarter]
  *           default: month
  *         description: |
- *           Loại chu kỳ:
- *           - day: Theo ngày (vd: 30 ngày gần nhất)
- *           - week: Theo tuần (vd: 10 tuần gần nhất)
- *           - month: Theo tháng (vd: 12 tháng gần nhất)
- *           - quarter: Theo quý (vd: 4 quý gần nhất)
+ *           LoÃ¡ÂºÂ¡i chu kÃ¡Â»Â³:
+ *           - day: Theo ngÃƒÂ y (vd: 30 ngÃƒÂ y gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t)
+ *           - week: Theo tuÃ¡ÂºÂ§n (vd: 10 tuÃ¡ÂºÂ§n gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t)
+ *           - month: Theo thÃƒÂ¡ng (vd: 12 thÃƒÂ¡ng gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t)
+ *           - quarter: Theo quÃƒÂ½ (vd: 4 quÃƒÂ½ gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t)
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           default: 12
- *         description: Số chu kỳ cần lấy
+ *         description: SÃ¡Â»â€˜ chu kÃ¡Â»Â³ cÃ¡ÂºÂ§n lÃ¡ÂºÂ¥y
  *         example: 12
  *       - in: query
  *         name: beforeDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Ngày kết thúc (mặc định là hôm nay)
+ *         description: NgÃƒÂ y kÃ¡ÂºÂ¿t thÃƒÂºc (mÃ¡ÂºÂ·c Ã„â€˜Ã¡Â»â€¹nh lÃƒÂ  hÃƒÂ´m nay)
  *         example: "2025-12-06"
  *     responses:
  *       200:
- *         description: Dữ liệu xu hướng theo chu kỳ
+ *         description: DÃ¡Â»Â¯ liÃ¡Â»â€¡u xu hÃ†Â°Ã¡Â»â€ºng theo chu kÃ¡Â»Â³
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *             examples:
  *               byDay:
- *                 summary: Ví dụ theo ngày (period=day, limit=7)
+ *                 summary: VÃƒÂ­ dÃ¡Â»Â¥ theo ngÃƒÂ y (period=day, limit=7)
  *                 value:
  *                   totalPeriods: 7
  *                   period: "day"
@@ -1090,7 +1090,7 @@ router.get(
  *                       averagePercent: 17.6
  *                       poorPercent: 5.9
  *               byMonth:
- *                 summary: Ví dụ theo tháng (period=month, limit=6)
+ *                 summary: VÃƒÂ­ dÃ¡Â»Â¥ theo thÃƒÂ¡ng (period=month, limit=6)
  *                 value:
  *                   totalPeriods: 6
  *                   period: "month"
@@ -1116,7 +1116,7 @@ router.get(
  *                       averagePercent: 17.6
  *                       poorPercent: 5.9
  *               byQuarter:
- *                 summary: Ví dụ theo quý (period=quarter, limit=4)
+ *                 summary: VÃƒÂ­ dÃ¡Â»Â¥ theo quÃƒÂ½ (period=quarter, limit=4)
  *                 value:
  *                   totalPeriods: 4
  *                   period: "quarter"
@@ -1153,23 +1153,23 @@ router.get(
  * @swagger
  * /predictions/stats/by-area-type:
  *   get:
- *     summary: Thống kê dự đoán theo loại vùng (Hàu/Cá giò)
+ *     summary: ThÃ¡Â»â€˜ng kÃƒÂª dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n theo loÃ¡ÂºÂ¡i vÃƒÂ¹ng (HÃƒÂ u/CÃƒÂ¡ giÃƒÂ²)
  *     tags: [Predictions]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     description: |
- *       Thống kê kết quả dự đoán phân theo loại vùng nuôi trồng.
- *       Bao gồm so sánh với đợt trước để thấy xu hướng thay đổi.
+ *       ThÃ¡Â»â€˜ng kÃƒÂª kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ dÃ¡Â»Â± Ã„â€˜oÃƒÂ¡n phÃƒÂ¢n theo loÃ¡ÂºÂ¡i vÃƒÂ¹ng nuÃƒÂ´i trÃ¡Â»â€œng.
+ *       Bao gÃ¡Â»â€œm so sÃƒÂ¡nh vÃ¡Â»â€ºi Ã„â€˜Ã¡Â»Â£t trÃ†Â°Ã¡Â»â€ºc Ã„â€˜Ã¡Â»Æ’ thÃ¡ÂºÂ¥y xu hÃ†Â°Ã¡Â»â€ºng thay Ã„â€˜Ã¡Â»â€¢i.
  *     parameters:
  *       - in: query
  *         name: beforeDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Xem thống kê tại thời điểm cụ thể
+ *         description: Xem thÃ¡Â»â€˜ng kÃƒÂª tÃ¡ÂºÂ¡i thÃ¡Â»Âi Ã„â€˜iÃ¡Â»Æ’m cÃ¡Â»Â¥ thÃ¡Â»Æ’
  *     responses:
  *       200:
- *         description: Thống kê theo loại vùng với so sánh đợt trước
+ *         description: ThÃ¡Â»â€˜ng kÃƒÂª theo loÃ¡ÂºÂ¡i vÃƒÂ¹ng vÃ¡Â»â€ºi so sÃƒÂ¡nh Ã„â€˜Ã¡Â»Â£t trÃ†Â°Ã¡Â»â€ºc
  *         content:
  *           application/json:
  *             schema:
@@ -1177,7 +1177,7 @@ router.get(
  *             example:
  *               byAreaType:
  *                 - type: "oyster"
- *                   name: "Hàu"
+ *                   name: "HÃƒÂ u"
  *                   current:
  *                     good: 10
  *                     average: 5
@@ -1193,7 +1193,7 @@ router.get(
  *                     unchanged: 11
  *                     worsened: 2
  *                 - type: "cobia"
- *                   name: "Cá giò"
+ *                   name: "CÃƒÂ¡ giÃƒÂ²"
  *                   current:
  *                     good: 5
  *                     average: 3
@@ -1217,3 +1217,4 @@ router.get(
 );
 
 module.exports = router;
+

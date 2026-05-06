@@ -134,7 +134,7 @@
     <div class="app-loading">
 
       <div class="app-brand-group">
-        <img id="loading-logo" alt="Logo" class="app-loading-logo" />
+        <img src="/favicon.svg" alt="Logo" class="app-loading-logo" />
 
         <div class="app-loading-text-group">
           <div class="app-loading-sub">AQUACULTURE</div>
@@ -147,22 +147,6 @@
       </span>
 
     </div>
-
-    <script>
-      (function () {
-        var img = document.getElementById('loading-logo');
-        if (!img) return;
-
-        var hostname = window.location.hostname;
-        var isLocal = hostname === "localhost" || hostname === "127.0.0.1";
-
-        img.src = window.location.origin + '/quanlytainguyen/favicon.svg';
-
-        img.onerror = function () {
-          this.src = '/favicon.svg';
-        };
-      })();
-    </script>
   </div>
   <script type="module" src="/src/index.jsx"></script>
 </body>

@@ -1,0 +1,44 @@
+{
+  "default": {
+    "wind_low_to_medium": 5.0,
+    "wind_medium_to_high": 8.5,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  },
+  "harbor_bay": {
+    "wind_low_to_medium": 4.5,
+    "wind_medium_to_high": 5.5,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  },
+  "industrial_east_coast": {
+    "wind_low_to_medium": 4.5,
+    "wind_medium_to_high": 6.0,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  },
+  "island_gateway": {
+    "wind_low_to_medium": 4.5,
+    "wind_medium_to_high": 6.0,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  },
+  "offshore_island": {
+    "wind_low_to_medium": 8.0,
+    "wind_medium_to_high": 12.0,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  },
+  "island_coastal_tourism": {
+    "wind_low_to_medium": 5.0,
+    "wind_medium_to_high": 7.5,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  },
+  "open_shipping_channel": {
+    "wind_low_to_medium": 5.0,
+    "wind_medium_to_high": 7.5,
+    "rain_low_to_medium": 1.0,
+    "rain_medium_to_high": 3.0
+  }
+}

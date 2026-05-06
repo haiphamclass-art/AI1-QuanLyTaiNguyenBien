@@ -20,7 +20,7 @@ const router = express.Router();
  *     summary: Get all natural elements (Admin/Manager/Expert only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -72,7 +72,7 @@ const router = express.Router();
      *                       unit:
      *                         type: string
      *                         description: Measurement unit
-     *                         example: "°C"
+     *                         example: "Â°C"
      *                       category:
      *                         type: string
      *                         description: Element category
@@ -95,7 +95,7 @@ router.get('/', getAllNaturalElements);
  *     summary: Get all categories of natural elements (Admin/Manager/Expert only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: List of categories
@@ -124,7 +124,7 @@ router.get('/categories', getCategories);
  *     summary: Get natural elements by category (Admin/Manager/Expert only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: category
@@ -155,7 +155,7 @@ router.get('/category/:category', getNaturalElementsByCategory);
  *     summary: Get natural element by ID (Admin/Manager/Expert only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -184,7 +184,7 @@ router.get('/:id', getNaturalElementById);
  *     summary: Create new natural element (Admin only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -204,7 +204,7 @@ router.get('/:id', getNaturalElementById);
  *                 example: "temperature"
  *               unit:
  *                 type: string
- *                 example: "°C"
+ *                 example: "Â°C"
  *               description:
  *                 type: string
  *                 example: "Temperature of water in the aquaculture area"
@@ -252,7 +252,7 @@ router.post(
  *     summary: Update natural element by ID (Admin only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -317,7 +317,7 @@ router.put(
  *     summary: Delete natural element by ID (Admin only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -353,7 +353,7 @@ router.delete(
  *     summary: Bulk update natural elements (Admin only)
  *     tags: [Nature Elements]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -381,7 +381,7 @@ router.delete(
  *                       example: "temperature"
  *                     unit:
  *                       type: string
- *                       example: "°C"
+ *                       example: "Â°C"
  *                     description:
  *                       type: string
  *                       example: "Updated description"

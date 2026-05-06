@@ -28,16 +28,13 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { login, logout } from '../redux/authSlice';
-import axios from '../axios';
-import { jwtDecode } from 'jwt-decode';
-import { toast } from 'react-toastify';
+import { loginUser } from '../redux/authSlice';
 
 const { Title } = Typography;
 
 const Login = () => {
   const { t } = useTranslation();
-  const { token } = useSelector((state) => state.auth);
+  const { isAuthenticated, role } = useSelector((state) => state.auth);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorType, setErrorType] = useState(''); // 'network', 'auth', 'validation', 'server'
@@ -46,28 +43,14 @@ const Login = () => {
   const [form] = Form.useForm();
 
   useEffect(() => {
-    if (token) {
-      try {
-        const decodedToken = jwtDecode(token); // Decode the JWT token
-        const exp = decodedToken.exp * 1000;
-        const now = Date.now();
-        if (now > exp) {
-          dispatch(logout());
-          navigate('/');
-        }
-        // Navigate based on role
-        const decodedRole = decodedToken.role;
-        if (decodedRole === 'admin' || decodedRole === 'manager') {
-          navigate('/admin-stats');
-        } else {
-          navigate('/dashboard');
-        }
-      } catch (error) {
-        console.error('Error decoding token:', error);
-        toast.error(t('login.invalidToken'));
+    if (isAuthenticated) {
+      if (role === 'admin' || role === 'manager') {
+        navigate('/admin-stats');
+      } else {
+        navigate('/dashboard');
       }
     }
-  }, [token, dispatch, navigate, t]);
+  }, [isAuthenticated, role, navigate]);
 
   const handleLogin = async (values) => {
     setLoading(true);
@@ -77,28 +60,15 @@ const Login = () => {
     try {
       console.log('Login attempt:', { email: values.email, password: '***' });
 
-      const response = await axios.post('/api/express/auth/login', {
+      const authenticatedUser = await dispatch(loginUser({
         email: values.email,
         password: values.password,
-      });
-
-      const { token, role } = response.data;
-      localStorage.setItem('token', token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-      // Dispatch login action with token and role
-      dispatch(
-        login({
-          user: values.email,
-          token,
-          role,
-        })
-      );
+      })).unwrap();
 
       message.success(t('login.success') || 'Đăng nhập thành công!');
 
       // Navigate based on role after successful login
-      if (role === 'admin' || role === 'manager') {
+      if (authenticatedUser.role === 'admin' || authenticatedUser.role === 'manager') {
         navigate('/admin-stats');
       } else {
         navigate('/dashboard');

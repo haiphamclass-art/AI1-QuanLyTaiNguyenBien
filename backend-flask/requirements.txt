@@ -1,4 +1,4 @@
-# Flask and web server
+﻿# Flask and web server
 flask==2.3.3
 flask-cors==4.0.0
 
@@ -29,6 +29,13 @@ xarray>=2023.4.0
 netCDF4==1.6.5
 h5netcdf==1.2.0
 gsw==3.6.17
+
+# Spatial processing for station zones
+geopandas==0.14.4
+shapely==2.0.6
+rasterio==1.3.11
+fiona==1.9.6
+pyproj==3.6.1
 
 # HTTP requests (for Google Drive download)
 requests==2.31.0

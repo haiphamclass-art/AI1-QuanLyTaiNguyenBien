@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   login,
+  logout,
   updateUserById,
   getAllUser,
   getUsersPaginated,
@@ -118,6 +119,7 @@ const router = express.Router();
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/login', login);
+router.post('/logout', logout);
 
 /**
  * @swagger
@@ -126,7 +128,7 @@ router.post('/login', login);
  *     summary: Get current user information from token
  *     tags: [Authentication]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: Current user information
@@ -220,7 +222,7 @@ router.get('/me', authenticate, getCurrentUser);
  *                 message:
  *                   type: string
  *                   description: Status message
- *                   example: "Tên đăng nhập có thể sử dụng"
+ *                   example: "TÃªn Ä‘Äƒng nháº­p cÃ³ thá»ƒ sá»­ dá»¥ng"
  *       400:
  *         description: Bad request - login_name is required
  *         content:
@@ -243,7 +245,7 @@ router.get('/check-login-name', checkLoginName);
  *     summary: Update user by ID
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -297,7 +299,7 @@ router.post('/update/:id', authenticate, authorize(['admin', 'manager']), update
  *     summary: Get all users
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -355,7 +357,7 @@ router.get('/', authenticate, authorize(['admin', 'manager']), getAllUser);
  *     summary: Get users with pagination
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: role
@@ -414,7 +416,7 @@ router.get('/paginated', authenticate, authorize(['admin', 'manager']), getUsers
  *     summary: Get user statistics (total users)
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: role
@@ -461,7 +463,7 @@ router.get(
  *     summary: Deactivate user
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -497,7 +499,7 @@ router.patch(
  *     summary: Activate user
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -533,7 +535,7 @@ router.patch(
  *     summary: Create new user (Admin only)
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -604,7 +606,7 @@ router.post(
  *     summary: Get user by ID
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -633,7 +635,7 @@ router.get('/user/:id', authenticate, getUserById);
  *     summary: Delete user (Admin only)
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -658,7 +660,7 @@ router.get('/user/:id', authenticate, getUserById);
 router.delete(
   '/delete/:id',
   authenticate,
-  authorize(['admin']), // chỉ admin mới được phép
+  authorize(['admin']), // chá»‰ admin má»›i Ä‘Æ°á»£c phÃ©p
   deleteUser
 );
 
@@ -669,7 +671,7 @@ router.delete(
  *     summary: Change current user's password (requires old password)
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -708,7 +710,7 @@ router.post('/change-password', authenticate, changePassword);
  *     summary: Admin force reset password for a user (Admin only)
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -780,7 +782,7 @@ router.post(
  *               properties:
  *                 message:
  *                   type: string
- *                   example: "Mã OTP đã được gửi đến email của bạn"
+ *                   example: "MÃ£ OTP Ä‘Ã£ Ä‘Æ°á»£c gá»­i Ä‘áº¿n email cá»§a báº¡n"
  *                 email:
  *                   type: string
  *                   example: "user@example.com"

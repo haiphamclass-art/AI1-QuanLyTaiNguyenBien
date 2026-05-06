@@ -17,7 +17,6 @@ const xlsx = require('xlsx');
 const { parseExcel2 } = require('../services/importService');
 const logger = require('../config/logger');
 const path = require('path');
-const FLASK_INTERNAL_HOST_HEADER = process.env.FLASK_INTERNAL_HOST_HEADER || 'localhost:5001';
 
 // Required fields for prediction model - only these should be saved to database
 const REQUIRED_FIELDS = [
@@ -25,8 +24,13 @@ const REQUIRED_FIELDS = [
   'R_Depth', 'Distance', 'Wind_Spd', 'Wave_Ht', 'Wave_Prd', 'IntChl', 'Dry_T'
 ];
 
-function createPredictionError(statusCode, message, details = undefined) {
-  const error = new Error(message || 'Prediction request failed');
+const FLASK_BASE_URL =
+  process.env.FLASK_BASE_URL ||
+  process.env.FLASK_API_URL ||
+  'http://127.0.0.1:5001';
+
+function createHttpError(statusCode, message, details) {
+  const error = new Error(message);
   error.statusCode = statusCode;
   if (details !== undefined) {
     error.details = details;
@@ -34,86 +38,55 @@ function createPredictionError(statusCode, message, details = undefined) {
   return error;
 }
 
-function getPredictionErrorMessage(payload, fallbackMessage) {
-  if (!payload) {
-    return fallbackMessage;
-  }
-
-  if (typeof payload === 'string' && payload.trim()) {
-    return payload;
-  }
-
-  if (typeof payload.error === 'string' && payload.error.trim()) {
-    return payload.error;
-  }
-
-  if (typeof payload.message === 'string' && payload.message.trim()) {
-    return payload.message;
-  }
-
-  if (typeof payload.prediction_result?.error === 'string' && payload.prediction_result.error.trim()) {
-    return payload.prediction_result.error;
-  }
-
-  return fallbackMessage;
-}
-
-function buildPredictionErrorPayload(error) {
-  const payload = {
-    error: error.message || 'Prediction request failed',
-    message: error.message || 'Prediction request failed',
-  };
-
-  if (error.details !== undefined) {
-    payload.details = error.details;
-  }
-
-  if (error.statusCode) {
-    payload.statusCode = error.statusCode;
-  }
-
-  return payload;
-}
-
-function respondWithPredictionError(res, error, logContext, meta = {}) {
-  const statusCode = error.statusCode || 500;
-  logger.error(logContext, {
-    ...meta,
-    message: error.message,
-    stack: error.stack,
-    statusCode,
-    details: error.details,
-  });
-
-  return res.status(statusCode).json(buildPredictionErrorPayload(error));
-}
-
-function toFiniteNumber(value) {
-  if (value === null || value === undefined || value === '') {
+function normalizeAlgorithmName(rawAlgorithm, species) {
+  if (!rawAlgorithm) {
     return null;
   }
 
-  const parsedValue = Number.parseFloat(value);
-  return Number.isFinite(parsedValue) ? parsedValue : null;
-}
+  let algorithm = rawAlgorithm.replace(/\.pkl$/i, '');
 
-function normalizeAlgorithmName(rawValue) {
-  if (!rawValue) {
-    return '';
+  if (species) {
+    const speciesPrefix = `${species}_`;
+    if (algorithm.startsWith(speciesPrefix)) {
+      algorithm = algorithm.substring(speciesPrefix.length);
+    }
   }
 
-  let normalized = path.basename(String(rawValue), path.extname(String(rawValue)));
-  normalized = normalized.replace(/_model$/i, '');
-  normalized = normalized.replace(/^stack_gen(?:eralization)?(?:_default)?$/i, 'stack');
-  return normalized;
+  algorithm = algorithm.replace(/_model$/i, '');
+  algorithm = algorithm.replace(/_model_/gi, '_');
+
+  if (/^stack_gen(?:_|$)/i.test(algorithm) || /^stack(?:_|$)/i.test(algorithm)) {
+    return 'stack';
+  }
+
+  return algorithm;
 }
 
-function getOrderedNatureElements(model) {
-  return [...(model?.natureElements || [])].sort((a, b) => {
-    const orderA = a?.ModelNatureElement?.input_order ?? 0;
-    const orderB = b?.ModelNatureElement?.input_order ?? 0;
-    return orderA - orderB;
-  });
+function getFlaskError(axiosError) {
+  if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
+    return createHttpError(
+      502,
+      `Cannot connect to Flask API at ${FLASK_BASE_URL}. Make sure backend-flask is running.`,
+      { code: axiosError.code, url: axiosError.config?.url }
+    );
+  }
+
+  const statusCode = axiosError.response?.status || 502;
+  const responseData = axiosError.response?.data;
+  const message = (typeof responseData === 'string' ? responseData : responseData?.error)
+    || responseData?.message
+    || axiosError.message
+    || 'Flask API error';
+
+  return createHttpError(statusCode, message, responseData);
+}
+
+function getPredictionNatureElements(prediction) {
+  if (!prediction) {
+    return [];
+  }
+
+  return prediction.NatureElements || prediction.NaturalElements || [];
 }
 
 /**
@@ -129,76 +102,43 @@ function getFlaskModelKey(model) {
   }
 
   const filePath = model.model_file_path;
-  const filename = path.basename(filePath, path.extname(filePath));
+  const filename = path.basename(filePath, '.pkl');
 
   // Check flat structure: species__algorithm_model
   if (filename.includes('__')) {
     const parts = filename.split('__');
     if (parts.length >= 2) {
-      const species = parts[0].toLowerCase();
-      const algorithm = normalizeAlgorithmName(parts[1]);
-      if (species && algorithm) {
-        return `${species}_${algorithm}`;
-      }
+      const species = parts[0];
+      const algorithm = normalizeAlgorithmName(parts[1], species);
+      return algorithm ? `${species}_${algorithm}` : null;
     }
   }
 
   // Check folder structure: model/species/algorithm_model.pkl
   const pathParts = filePath.split(/[\/\\]/);
   if (pathParts.length >= 2) {
-    const species = pathParts[pathParts.length - 2].toLowerCase();
-    let algorithm = normalizeAlgorithmName(filename);
-
-    // Remove species prefix if exists (e.g., oyster_ridge -> ridge)
-    const speciesPrefix = species + '_';
-    if (algorithm.startsWith(speciesPrefix)) {
-      algorithm = algorithm.substring(speciesPrefix.length);
-    }
-
-    if (species && algorithm) {
-      return `${species}_${algorithm}`;
-    }
+    const species = pathParts[pathParts.length - 2]; // Parent folder (oyster/cobia)
+    const algorithm = normalizeAlgorithmName(filename, species);
+    return algorithm ? `${species}_${algorithm}` : null;
   }
 
   return null;
 }
 
-function getModelFields(model) {
-  const modelFields = getOrderedNatureElements(model)
-    .map((element) => element?.name)
-    .filter(Boolean);
+// Helper function to create prediction without Express req/res
+async function createPredictionInternal(userId, areaId, inputs, modelName, createdAt = null) {
+  const area = await Area.findByPk(areaId);
+  if (!area) {
+    throw createHttpError(404, 'Area not found');
+  }
 
-  return modelFields.length > 0 ? modelFields : REQUIRED_FIELDS;
-}
-
-function getModelFallbackMap(model) {
-  const fallbackMap = {};
-
-  getOrderedNatureElements(model).forEach((element) => {
-    const modelFallback = element.ModelNatureElement?.fallback_value;
-    const globalFallback = element.fallback_value;
-    const fallbackValue = modelFallback !== null && modelFallback !== undefined
-      ? modelFallback
-      : globalFallback;
-
-    if (fallbackValue !== null && fallbackValue !== undefined) {
-      fallbackMap[element.name] = fallbackValue;
-    }
-  });
-
-  return fallbackMap;
-}
-
-async function resolvePredictionModel(modelName) {
-  const parsedModelId = typeof modelName === 'number'
-    ? modelName
-    : Number.parseInt(modelName, 10);
-
-  const whereClause = Number.isInteger(parsedModelId) && String(modelName).trim() !== ''
-    ? { id: parsedModelId }
+  // Fetch model with nature elements and fallback values
+  // Support both model name (string) and model ID (integer)
+  const whereClause = typeof modelName === 'number' || !isNaN(parseInt(modelName))
+    ? { id: parseInt(modelName) }
     : { name: modelName };
 
-  return MLModel.findOne({
+  const model = await MLModel.findOne({
     where: whereClause,
     include: [
       {
@@ -212,127 +152,60 @@ async function resolvePredictionModel(modelName) {
       },
     ],
   });
-}
 
-async function callFlaskPrediction(flaskUrl, requestBody, logMeta) {
-  logger.info('[Flask Request] Sending prediction request', {
-    url: flaskUrl,
-    method: 'POST',
-    ...logMeta,
-    hostHeader: FLASK_INTERNAL_HOST_HEADER,
-    requestData: {
-      model: requestBody.model,
-      lat: requestBody.lat,
-      lon: requestBody.lon,
-      fieldsCount: Object.keys(requestBody).filter((key) => !['model', 'lat', 'lon'].includes(key)).length,
-      fields: Object.keys(requestBody).filter((key) => !['model', 'lat', 'lon'].includes(key)),
-    }
-  });
-  logger.debug('[Flask Request] Full request data', { requestBody });
-
-  let flaskResponse;
-  try {
-    flaskResponse = await axios.post(flaskUrl, requestBody, {
-      headers: {
-        Host: FLASK_INTERNAL_HOST_HEADER,
-      },
-      validateStatus: () => true,
-    });
-  } catch (axiosError) {
-    logger.error('[Flask Error] Failed to reach prediction service', {
-      ...logMeta,
-      message: axiosError.message,
-      code: axiosError.code,
-      url: flaskUrl,
-    });
-
-    throw createPredictionError(
-      502,
-      'Could not reach Flask prediction service',
-      { code: axiosError.code, message: axiosError.message }
-    );
-  }
-
-  logger.info('[Flask Response] Received prediction response', {
-    ...logMeta,
-    status: flaskResponse.status,
-    prediction: flaskResponse.data?.prediction_result?.prediction,
-    model_used: flaskResponse.data?.prediction_result?.model_used,
-  });
-  logger.debug('[Flask Response] Full response data', { data: flaskResponse.data });
-
-  if (flaskResponse.status >= 400) {
-    throw createPredictionError(
-      flaskResponse.status,
-      getPredictionErrorMessage(
-        flaskResponse.data,
-        `Flask API returned status ${flaskResponse.status}`
-      ),
-      flaskResponse.data
-    );
-  }
-
-  if (flaskResponse.data?.error) {
-    throw createPredictionError(
-      502,
-      getPredictionErrorMessage(flaskResponse.data, 'Flask API returned an invalid error payload'),
-      flaskResponse.data
-    );
-  }
-
-  return flaskResponse.data;
-}
-
-// Helper function to create prediction without Express req/res
-async function createPredictionInternal(userId, areaId, inputs, modelName, createdAt = null) {
-  if (!userId) {
-    throw createPredictionError(400, 'userId is required');
-  }
-
-  const area = await Area.findByPk(areaId);
-  if (!area) {
-    throw createPredictionError(404, 'Area not found');
-  }
-
-  const model = await resolvePredictionModel(modelName);
   if (!model) {
-    throw createPredictionError(400, 'Prediction model not found', { modelName });
+    throw createHttpError(400, 'Selected model was not found');
   }
 
+  // Get Flask model key from file path (e.g., "oyster_stack", "cobia_ridge")
   const flaskModelKey = getFlaskModelKey(model);
-  const actualModelName = flaskModelKey || (typeof modelName === 'string' ? modelName : model.name);
-  const modelFields = getModelFields(model);
-  const allowedFields = new Set(modelFields);
-  const fallbackMap = getModelFallbackMap(model);
-  const filteredInputs = {};
-  const skippedFields = [];
-  const appliedFallbacks = [];
-  const requestInputs = inputs || {};
 
   if (!flaskModelKey) {
-    logger.warn('[Prediction] Could not extract Flask model key from model file path', {
+    logger.warn(`[Prediction] Could not extract Flask model key from model file path`, {
       modelId: model.id,
       modelName: model.name,
-      modelFilePath: model.model_file_path,
+      modelFilePath: model.model_file_path
+    });
+  }
+
+  // If mapping fails, let Flask fall back to the default model for the species.
+  const actualModelName = flaskModelKey || null;
+
+  // Build fallback map: elementName -> fallback_value (prioritize model-specific, then global)
+  const fallbackMap = {};
+  if (model && model.natureElements) {
+    model.natureElements.forEach(element => {
+      const modelFallback = element.ModelNatureElement?.fallback_value;
+      const globalFallback = element.fallback_value;
+      const fallbackValue = modelFallback !== null && modelFallback !== undefined
+        ? modelFallback
+        : globalFallback;
+
+      if (fallbackValue !== null && fallbackValue !== undefined) {
+        fallbackMap[element.name] = fallbackValue;
+      }
     });
   }
 
   logger.debug(`[Prediction] Fallback map for model ${modelName}:`, fallbackMap);
 
-  for (const [key, value] of Object.entries(requestInputs)) {
-    if (allowedFields.has(key)) {
-      const numericValue = toFiniteNumber(value);
-      if (numericValue !== null) {
-        filteredInputs[key] = numericValue;
-      }
+  // Filter inputs to only include required fields for the model
+  const filteredInputs = {};
+  const skippedFields = [];
+  const appliedFallbacks = [];
+
+  for (const [key, value] of Object.entries(inputs || {})) {
+    if (REQUIRED_FIELDS.includes(key)) {
+      filteredInputs[key] = Number.parseFloat(value);
     } else {
       skippedFields.push(key);
     }
   }
 
+  // Apply fallback values for missing required fields
   const missingFields = [];
-  modelFields.forEach((field) => {
-    if (filteredInputs[field] == null || Number.isNaN(filteredInputs[field])) {
+  REQUIRED_FIELDS.forEach(field => {
+    if (filteredInputs[field] == null || isNaN(filteredInputs[field])) {
       if (fallbackMap[field] !== undefined) {
         filteredInputs[field] = fallbackMap[field];
         appliedFallbacks.push(`${field}=${fallbackMap[field]}`);
@@ -350,60 +223,91 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
     logger.info(`[Prediction] Applied fallback values: ${appliedFallbacks.join(', ')}`);
   }
 
-  const latitude = toFiniteNumber(area.latitude);
-  const longitude = toFiniteNumber(area.longitude);
-  const hasAreaCoordinates = latitude !== null && longitude !== null;
-
   if (missingFields.length > 0) {
-    if (!hasAreaCoordinates) {
-      throw createPredictionError(
+    logger.warn(`[Prediction] Missing required fields without fallback: ${missingFields.join(', ')}`);
+    logger.warn(`[Prediction] These fields will be omitted from prediction request. This may affect prediction accuracy.`);
+    if (area.latitude == null || area.longitude == null) {
+      throw createHttpError(
         400,
-        'Missing required fields and area does not have coordinates to complete prediction data',
-        {
-          missing_fields: missingFields,
-          model: model.name,
-          areaId,
-        }
+        `Missing required fields without fallback: ${missingFields.join(', ')}`,
+        { missingFields }
       );
     }
-
-    logger.warn(`[Prediction] Missing required fields without fallback: ${missingFields.join(', ')}`);
-    logger.warn('[Prediction] These fields will be requested from Flask using area coordinates.');
   }
 
+  // Prepare request data for Flask API - only include REQUIRED_FIELDS + lat/lon
   const flaskRequestData = {};
-  modelFields.forEach((field) => {
+  REQUIRED_FIELDS.forEach(field => {
     if (filteredInputs[field] != null) {
       flaskRequestData[field] = filteredInputs[field];
     }
   });
-
-  if (hasAreaCoordinates) {
-    flaskRequestData.lat = latitude;
-    flaskRequestData.lon = longitude;
-  }
-
+  flaskRequestData.lat = area.latitude;
+  flaskRequestData.lon = area.longitude;
   if (actualModelName) {
     flaskRequestData.model = actualModelName;
   }
 
-  if (!process.env.FLASK_API_URL) {
-    throw createPredictionError(500, 'FLASK_API_URL is not configured');
-  }
-
-  const endpoint = (actualModelName || model.area_type || '').toLowerCase().includes('oyster')
+  // Determine Flask endpoint based on actual model name
+  const endpoint = (model.area_type || '').toLowerCase().includes('oyster')
     ? '/predict/oyster'
     : '/predict/cobia';
-  const flaskUrl = `${process.env.FLASK_API_URL}${endpoint}`;
+  const flaskUrl = `${FLASK_BASE_URL}${endpoint}`;
 
-  const flaskResult = await callFlaskPrediction(flaskUrl, flaskRequestData, {
-    flaskModelKey,
+  // Log request to Flask
+  logger.info('[Flask Request] Sending prediction request', {
+    url: flaskUrl,
+    method: 'POST',
+    bodyModel: actualModelName,
+    flaskModelKey: flaskModelKey,
     originalModelName: model.name,
     modelFilePath: model.model_file_path,
+    requestData: {
+      lat: flaskRequestData.lat,
+      lon: flaskRequestData.lon,
+      fieldsCount: Object.keys(flaskRequestData).filter(k => !['lat', 'lon', 'model'].includes(k)).length,
+      fields: Object.keys(flaskRequestData).filter(k => !['lat', 'lon', 'model'].includes(k)),
+    }
+  });
+  logger.debug('[Flask Request] Full request data', {
+    flaskRequestData
   });
 
-  if (!flaskResult?.prediction_result) {
-    throw createPredictionError(502, 'Flask response is missing prediction_result', flaskResult);
+  let flaskResponse;
+  try {
+    flaskResponse = await axios.post(flaskUrl, flaskRequestData);
+
+    // Log successful response
+    logger.info('[Flask Response] Received prediction response', {
+      status: flaskResponse.status,
+      prediction: flaskResponse.data?.prediction_result?.prediction,
+      model_used: flaskResponse.data?.prediction_result?.model_used,
+    });
+    logger.debug('[Flask Response] Full response data', {
+      data: flaskResponse.data
+    });
+  } catch (axiosError) {
+    logger.error('[Flask Error] Failed to get prediction', {
+      message: axiosError.message,
+      status: axiosError.response?.status,
+      statusText: axiosError.response?.statusText,
+      errorData: axiosError.response?.data,
+      url: flaskUrl,
+      requestBodyModel: actualModelName,
+    });
+    throw getFlaskError(axiosError);
+  }
+
+  // Check HTTP status code
+  if (flaskResponse.status >= 400) {
+    logger.error('[Prediction] Flask returned error status', { status: flaskResponse.status, data: flaskResponse.data });
+    throw createHttpError(flaskResponse.status, flaskResponse.data?.error || 'Flask API returned error status', flaskResponse.data);
+  }
+
+  const flaskResult = flaskResponse.data;
+  if (flaskResult.error) {
+    logger.error('[Prediction] Flask response contains error', { error: flaskResult.error });
+    throw createHttpError(502, flaskResult.error, flaskResult);
   }
 
   const { prediction_result } = flaskResult;
@@ -453,8 +357,7 @@ async function createPredictionInternal(userId, areaId, inputs, modelName, creat
   return {
     prediction_id: predictionRecord.id,
     prediction_text: prediction_result.prediction,
-    model_used: prediction_result.model_used || actualModelName,
-    model_name: model.name,
+    model_used: prediction_result.model_used || actualModelName || model.name,
   };
 }
 
@@ -475,7 +378,7 @@ exports.createPrediction = async (req, res) => {
     try {
       await sendPredictionNotification(areaId, {
         result: result.prediction_text,
-        model: modelName,
+        model: result.model_used,
         predictionId: result.prediction_id,
       });
     } catch (emailError) {
@@ -484,9 +387,17 @@ exports.createPrediction = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    return respondWithPredictionError(res, error, 'Create Prediction Error', {
+    logger.error('Create Prediction Error', {
+      message: error.message,
+      stack: error.stack,
       requestData: req.body,
-      flaskUrl: process.env.FLASK_API_URL,
+      flaskUrl: FLASK_BASE_URL,
+      statusCode: error.statusCode,
+      details: error.details,
+    });
+    res.status(error.statusCode || 500).json({
+      error: error.message,
+      ...(error.details ? { details: error.details } : {}),
     });
   }
 };
@@ -913,26 +824,58 @@ exports.getPredictionsByUser = async (req, res) => {
   }
 };
 
-const deprecatedCreateBatchPrediction = async (req, res) => {
+exports.createBatchPrediction = async (req, res) => {
   logger.info('Batch Processing');
 
   const userId = req.user?.id || req.body.userId;
   const { areaId, modelName, data } = req.body;
   try {
-    if (!userId) {
-      throw createPredictionError(400, 'userId is required');
-    }
-
-    if (!areaId || !modelName) {
-      throw createPredictionError(400, 'areaId and modelName are required');
-    }
-
     if (!Array.isArray(data) || data.length === 0) {
-      throw createPredictionError(400, 'Batch prediction data must be a non-empty array');
+      return res.status(400).json({ error: 'Prediction data must be a non-empty array' });
     }
 
-    const predictionsResult = [];
-    for (const [index, rowData] of data.entries()) {
+    const batchResults = [];
+    for (let index = 0; index < data.length; index += 1) {
+      const rawInputs = data[index] || {};
+      const createdAt = rawInputs.createdAt || null;
+      const inputs = { ...rawInputs };
+      delete inputs.createdAt;
+
+      try {
+        const result = await createPredictionInternal(userId, areaId, inputs, modelName, createdAt);
+        batchResults.push({
+          prediction_id: result.prediction_id,
+          prediction_text: result.prediction_text,
+          inputs: rawInputs,
+        });
+      } catch (error) {
+        throw createHttpError(
+          error.statusCode || 500,
+          `Batch record ${index + 1}/${data.length}: ${error.message}`,
+          {
+            ...(error.details || {}),
+            recordIndex: index + 1,
+            totalRecords: data.length,
+          }
+        );
+      }
+    }
+
+    try {
+      await sendPredictionNotification(areaId, {
+        result: `Da tao ${batchResults.length} du doan moi`,
+        model: modelName,
+        predictionCount: batchResults.length,
+        batchPrediction: true
+      });
+    } catch (emailError) {
+      logger.error('Failed to send batch prediction notification', { error: emailError.message });
+    }
+
+    return res.json({ predictions: batchResults, model_used: modelName });
+
+    /*
+    for (const inputs of []) {
       // Filter inputs to only include required fields for the model
       const filteredInputs = {};
       const skippedFields = [];
@@ -1031,9 +974,8 @@ const deprecatedCreateBatchPrediction = async (req, res) => {
       };
 
       // Nếu có createdAt từ input, sử dụng nó
-      const isCreatedAtSupportedType = typeof createdAt === 'string' || createdAt instanceof Date;
-      const customDate = isCreatedAtSupportedType ? new Date(createdAt) : null;
-      if (customDate && !isNaN(customDate.getTime())) {
+      if (createdAt && !isNaN(new Date(createdAt).getTime())) {
+        const customDate = new Date(createdAt);
         predictionData.createdAt = customDate;
         predictionData.updatedAt = customDate;
         logger.debug('Using custom timestamp', { customDate });
@@ -1084,79 +1026,18 @@ const deprecatedCreateBatchPrediction = async (req, res) => {
     }
 
     res.json({ predictions: predictionsResult, model_used: modelName });
+    */
   } catch (error) {
-    logger.error('Batch prediction error', { error: error.message, stack: error.stack });
-
-    res.status(500).json({ error: error.message });
-  }
-};
-
-exports.createBatchPrediction = async (req, res) => {
-  logger.info('Batch Processing');
-
-  const userId = req.user?.id || req.body.userId;
-  const { areaId, modelName, data } = req.body;
-
-  try {
-    if (!userId) {
-      throw createPredictionError(400, 'userId is required');
-    }
-
-    if (!areaId || !modelName) {
-      throw createPredictionError(400, 'areaId and modelName are required');
-    }
-
-    if (!Array.isArray(data) || data.length === 0) {
-      throw createPredictionError(400, 'Batch prediction data must be a non-empty array');
-    }
-
-    const predictionsResult = [];
-    for (const [index, rowData] of data.entries()) {
-      const currentRow = rowData || {};
-      const { createdAt = null, ...rowInputs } = currentRow;
-
-      try {
-        const result = await createPredictionInternal(
-          userId,
-          areaId,
-          rowInputs,
-          modelName,
-          createdAt
-        );
-
-        predictionsResult.push({
-          ...result,
-          inputs: currentRow,
-        });
-      } catch (error) {
-        throw createPredictionError(
-          error.statusCode || 500,
-          `Failed at row ${index + 1}/${data.length}: ${error.message}`,
-          error.details
-        );
-      }
-    }
-
-    try {
-      await sendPredictionNotification(areaId, {
-        result: `Da tao ${predictionsResult.length} du doan moi`,
-        model: predictionsResult[0]?.model_name || modelName,
-        predictionCount: predictionsResult.length,
-        batchPrediction: true,
-      });
-    } catch (emailError) {
-      logger.error('Failed to send batch prediction notification', { error: emailError.message });
-    }
-
-    return res.json({
-      predictions: predictionsResult,
-      model_used: predictionsResult[0]?.model_used || modelName,
+    logger.error('Batch prediction error', {
+      error: error.message,
+      stack: error.stack,
+      statusCode: error.statusCode,
+      details: error.details,
     });
-  } catch (error) {
-    return respondWithPredictionError(res, error, 'Batch prediction error', {
-      areaId,
-      modelName,
-      batchSize: Array.isArray(data) ? data.length : 0,
+
+    res.status(error.statusCode || 500).json({
+      error: error.message,
+      ...(error.details ? { details: error.details } : {}),
     });
   }
 };
@@ -1306,11 +1187,8 @@ exports.createBatchPredictionFromExcel = async (req, res) => {
 
     return exports.createBatchPrediction(req, res);
   } catch (error) {
-    return respondWithPredictionError(res, error, 'createBatchPredictionFromExcel error', {
-      modelName: req.body?.modelName,
-      areaId: req.body?.areaId,
-      hasFile: !!req.file,
-    });
+    logger.error('createBatchPredictionFromExcel error:', error);
+    return res.status(500).json({ error: error.message });
   }
 };
 
@@ -1377,12 +1255,13 @@ exports.createBatchPredictionFromExcel2 = async (req, res) => {
           error: error.message,
           statusCode: error.statusCode,
           details: error.details,
+          data: error.data
         });
         // Stop processing and let worker mark job as failed
-        throw createPredictionError(
+        throw createHttpError(
           error.statusCode || 500,
           `Failed at row ${index + 1}/${parsed.length} (area: ${row.areaName}): ${error.message}`,
-          error.details
+          error.details || error.data
         );
       }
     }
@@ -1390,9 +1269,10 @@ exports.createBatchPredictionFromExcel2 = async (req, res) => {
     logger.info('[Excel2] Created predictions:', { created, total: parsed.length });
     return res.json({ parsed: parsed.length, created });
   } catch (e) {
-    return respondWithPredictionError(res, e, 'createBatchPredictionFromExcel2 error', {
-      modelName: req.body?.modelName,
-      hasFile: !!req.file,
+    logger.error('createBatchPredictionFromExcel2 error:', e);
+    return res.status(e.statusCode || 500).json({
+      error: e.message,
+      ...(e.details ? { details: e.details } : {}),
     });
   }
 };
@@ -1451,7 +1331,7 @@ exports.getPredictionChartData = async (req, res) => {
       });
 
       // Fill in actual values from prediction
-      prediction.NatureElements.forEach(natureElement => {
+      getPredictionNatureElements(prediction).forEach(natureElement => {
         indicators[natureElement.name] = natureElement.PredictionNatureElement.value;
       });
 
@@ -1592,7 +1472,7 @@ exports.getAllPredictionChartData = async (req, res) => {
       });
 
       // Fill in actual values from latest prediction
-      latestPrediction.NatureElements.forEach(natureElement => {
+      getPredictionNatureElements(latestPrediction).forEach(natureElement => {
         indicators[natureElement.name] = natureElement.PredictionNatureElement.value;
       });
 
@@ -1602,7 +1482,7 @@ exports.getAllPredictionChartData = async (req, res) => {
         const previousPrediction = areaPredictions[1];
         allNatureElements.forEach(element => {
           const latestValue = indicators[element.name];
-          const previousValue = previousPrediction.NatureElements.find(
+          const previousValue = getPredictionNatureElements(previousPrediction).find(
             ne => ne.name === element.name
           )?.PredictionNatureElement?.value;
 
@@ -2729,7 +2609,7 @@ exports.exportPredictionsToExcel = async (req, res) => {
         // Add indicator values with proper fallback handling
         indicators.forEach(indicator => {
           try {
-            const element = prediction.NatureElements?.find(ne => ne.name === indicator);
+            const element = getPredictionNatureElements(prediction).find(ne => ne.name === indicator);
             const value = element?.PredictionNatureElement?.value;
             // Keep 0 as valid value, only fallback for null/undefined
             rowData[indicator] = (value !== null && value !== undefined) ? value : '-';

@@ -1,11 +1,112 @@
 const { MLModel, NatureElement, ModelNatureElement } = require('../models');
 const logger = require('../config/logger');
-const FLASK_INTERNAL_HOST_HEADER = process.env.FLASK_INTERNAL_HOST_HEADER || 'localhost:5001';
 const { Op } = require('sequelize');
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
 const googleDriveService = require('../services/googleDriveService');
+
+const SENSITIVE_MODEL_FIELDS = [
+  'model_file_path',
+  'google_drive_file_id',
+  'google_drive_download_link',
+];
+
+const PUBLIC_MODEL_METADATA_FIELDS = [
+  'id',
+  'name',
+  'description',
+  'area_type',
+  'is_active',
+  'is_default',
+  'createdAt',
+  'updatedAt',
+];
+
+const serializeMLModel = (model, { includeInternals = false } = {}) => {
+  if (!model) return model;
+  const data = typeof model.toJSON === 'function' ? model.toJSON() : model;
+  if (includeInternals) return data;
+
+  const sanitized = { ...data };
+  SENSITIVE_MODEL_FIELDS.forEach((field) => {
+    delete sanitized[field];
+  });
+  return sanitized;
+};
+
+const serializeMLModels = (models, options = {}) => models.map((model) => serializeMLModel(model, options));
+
+const serializeMLModelMetadata = (model) => {
+  if (!model) return model;
+  const data = typeof model.toJSON === 'function' ? model.toJSON() : model;
+  return PUBLIC_MODEL_METADATA_FIELDS.reduce((metadata, field) => {
+    if (data[field] !== undefined) {
+      metadata[field] = data[field];
+    }
+    return metadata;
+  }, {});
+};
+
+const serializeMLModelsMetadata = (models) => models.map(serializeMLModelMetadata);
+
+const getNatureElementInclude = () => ({
+  model: NatureElement,
+  as: 'natureElements',
+  through: {
+    attributes: ['id', 'is_required', 'input_order', 'fallback_value'],
+  },
+  attributes: ['id', 'name', 'description', 'unit', 'category', 'fallback_value'],
+});
+
+const buildMLModelWhere = ({ is_active, area_type, search } = {}) => {
+  const whereClause = {};
+  if (is_active !== undefined) {
+    whereClause.is_active = is_active === true || is_active === 'true';
+  }
+  if (area_type) {
+    whereClause.area_type = area_type;
+  }
+  if (search) {
+    whereClause.name = { [Op.iLike]: `%${search}%` };
+  }
+  return whereClause;
+};
+
+const fetchMLModels = async ({ filters, limit, offset } = {}) => {
+  const queryOptions = {
+    where: buildMLModelWhere(filters),
+    include: [getNatureElementInclude()],
+    order: [['createdAt', 'DESC']],
+    distinct: true,
+  };
+
+  if (limit !== undefined) {
+    queryOptions.limit = parseInt(limit, 10);
+  }
+  if (offset !== undefined) {
+    queryOptions.offset = parseInt(offset, 10);
+  }
+
+  return MLModel.findAndCountAll(queryOptions);
+};
+
+const fetchPublicMLModelMetadata = async ({ filters, limit, offset } = {}) => {
+  const queryOptions = {
+    where: buildMLModelWhere(filters),
+    attributes: PUBLIC_MODEL_METADATA_FIELDS,
+    order: [['createdAt', 'DESC']],
+  };
+
+  if (limit !== undefined) {
+    queryOptions.limit = parseInt(limit, 10);
+  }
+  if (offset !== undefined) {
+    queryOptions.offset = parseInt(offset, 10);
+  }
+
+  return MLModel.findAndCountAll(queryOptions);
+};
 
 /**
  * Check for duplicate model names and file paths
@@ -117,43 +218,11 @@ exports.getAllMLModels = async (req, res) => {
   try {
     const { is_active, area_type, search, limit, offset } = req.query;
 
-    const whereClause = {};
-    if (is_active !== undefined) {
-      whereClause.is_active = is_active === 'true';
-    }
-    if (area_type) {
-      whereClause.area_type = area_type;
-    }
-    if (search) {
-      whereClause.name = { [Op.iLike]: `%${search}%` };
-    }
-
-    const queryOptions = {
-      where: whereClause,
-      include: [
-        {
-          model: NatureElement,
-          as: 'natureElements',
-          through: {
-            attributes: ['id', 'is_required', 'input_order', 'fallback_value'],
-          },
-          attributes: ['id', 'name', 'description', 'unit', 'category', 'fallback_value'],
-        },
-      ],
-      order: [['createdAt', 'DESC']],
-      distinct: true,
-    };
-
-    // Optional pagination - if limit/offset provided, use pagination
-    if (limit !== undefined) {
-      queryOptions.limit = parseInt(limit, 10);
-    }
-    if (offset !== undefined) {
-      queryOptions.offset = parseInt(offset, 10);
-    }
-
-    // Use findAndCountAll for consistent total count
-    const { count, rows } = await MLModel.findAndCountAll(queryOptions);
+    const { count, rows } = await fetchMLModels({
+      filters: { is_active, area_type, search },
+      limit,
+      offset,
+    });
 
     // Debug log for first model's natureElements
     if (rows.length > 0 && rows[0].natureElements && rows[0].natureElements.length > 0) {
@@ -167,7 +236,7 @@ exports.getAllMLModels = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: rows,
+      data: serializeMLModels(rows),
       total: count,
       // Legacy support
       count: rows.length,
@@ -185,6 +254,101 @@ exports.getAllMLModels = async (req, res) => {
 };
 
 /**
+ * Get public ML model metadata for clients that only need selectable models.
+ */
+exports.getPublicMLModelMetadata = async (req, res) => {
+  try {
+    const { area_type, search, limit, offset } = req.query;
+    const { count, rows } = await fetchPublicMLModelMetadata({
+      filters: { is_active: true, area_type, search },
+      limit,
+      offset,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: serializeMLModelsMetadata(rows),
+      total: count,
+      count: rows.length,
+    });
+  } catch (error) {
+    logger.error('Get Public ML Model Metadata Error:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch ML model metadata',
+    });
+  }
+};
+
+/**
+ * Get public ML model metadata by ID for active models only.
+ */
+exports.getPublicMLModelMetadataById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const model = await MLModel.findOne({
+      where: { id, is_active: true },
+      attributes: PUBLIC_MODEL_METADATA_FIELDS,
+    });
+
+    if (!model) {
+      return res.status(404).json({
+        success: false,
+        error: 'ML Model not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: serializeMLModelMetadata(model),
+    });
+  } catch (error) {
+    logger.error('Get Public ML Model Metadata By ID Error:', {
+      message: error.message,
+      stack: error.stack,
+      id: req.params.id,
+    });
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch ML model metadata',
+    });
+  }
+};
+
+/**
+ * Get full ML model internals for administrators.
+ */
+exports.getMLModelInternals = async (req, res) => {
+  try {
+    const { is_active, area_type, search, limit, offset } = req.query;
+    const { count, rows } = await fetchMLModels({
+      filters: { is_active, area_type, search },
+      limit,
+      offset,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: serializeMLModels(rows, { includeInternals: true }),
+      total: count,
+      count: rows.length,
+    });
+  } catch (error) {
+    logger.error('Get ML Model Internals Error:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch ML model internals',
+    });
+  }
+};
+
+/**
  * Get a single ML Model by ID
  */
 exports.getMLModelById = async (req, res) => {
@@ -194,12 +358,10 @@ exports.getMLModelById = async (req, res) => {
     const model = await MLModel.findByPk(id, {
       include: [
         {
-          model: NatureElement,
-          as: 'natureElements',
+          ...getNatureElementInclude(),
           through: {
             attributes: ['is_required', 'input_order', 'id', 'fallback_value'],
           },
-          attributes: ['id', 'name', 'description', 'unit', 'category', 'fallback_value'],
         },
       ],
     });
@@ -213,7 +375,7 @@ exports.getMLModelById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: model,
+      data: serializeMLModel(model),
     });
   } catch (error) {
     logger.error('Get ML Model By ID Error:', {
@@ -224,6 +386,41 @@ exports.getMLModelById = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch ML model',
+    });
+  }
+};
+
+/**
+ * Get full ML model internals by ID for administrators.
+ */
+exports.getMLModelInternalById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const model = await MLModel.findByPk(id, {
+      include: [getNatureElementInclude()],
+    });
+
+    if (!model) {
+      return res.status(404).json({
+        success: false,
+        error: 'ML Model not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: serializeMLModel(model, { includeInternals: true }),
+    });
+  } catch (error) {
+    logger.error('Get ML Model Internal By ID Error:', {
+      message: error.message,
+      stack: error.stack,
+      id: req.params.id,
+    });
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch ML model internals',
     });
   }
 };
@@ -515,7 +712,6 @@ exports.deleteMLModel = async (req, res) => {
         {
           headers: {
             'X-RELOAD-SECRET': reloadSecret,
-            Host: FLASK_INTERNAL_HOST_HEADER,
           },
           timeout: 10000,
         }
@@ -726,7 +922,6 @@ exports.uploadModelFile = async (req, res) => {
         {
           headers: {
             'X-RELOAD-SECRET': reloadSecret,
-            Host: FLASK_INTERNAL_HOST_HEADER,
           },
           timeout: 30000, // 30 seconds for download + reload
         }

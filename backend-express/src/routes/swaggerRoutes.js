@@ -1,5 +1,6 @@
 const express = require('express');
 const swaggerSpecs = require('../config/swagger.js');
+const { swaggerAccess } = require('../middlewares/swaggerAccessMiddleware');
 const router = express.Router();
 
 /**
@@ -20,7 +21,7 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.get('/swagger', (req, res) => {
+router.get('/swagger', swaggerAccess, (req, res) => {
     try {
         res.json({
             success: true,

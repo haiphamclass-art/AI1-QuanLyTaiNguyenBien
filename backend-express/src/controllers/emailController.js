@@ -1,11 +1,13 @@
-require('dotenv').config();
 const { Email, Area, Otp } = require('../models');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const logger = require('../config/logger');
-const EMAIL_USER = process.env.EMAIL_USER || 'your-email@gmail.com';
-const EMAIL_PASSWORD = (process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || 'your-app-password')
-  .replace(/\s+/g, '');
+const { FRONTEND_BASE_URL } = require('../config/publicUrls');
+const {
+  AreaScopeError,
+  applyAreaScope,
+  assertAreaWithinScope,
+} = require('../utils/areaScope');
 
 
 const resultConvert = (result) => {
@@ -19,13 +21,66 @@ const resultConvert = (result) => {
   }
 }
 
+const EMAIL_PUBLIC_ATTRIBUTES = [
+  'id',
+  'email',
+  'area_id',
+  'is_active',
+  'created_at',
+  'updated_at',
+];
+
+const sanitizeSubscription = (subscription) => {
+  if (!subscription) return subscription;
+  const data = typeof subscription.toJSON === 'function' ? subscription.toJSON() : subscription;
+  const { unsubscribe_token, ...safeData } = data;
+  return safeData;
+};
+
+const sanitizeSubscriptions = (subscriptions) => subscriptions.map(sanitizeSubscription);
+
+const handleAreaScopeError = (res, error) => {
+  if (error instanceof AreaScopeError) {
+    return res.status(error.status).json({ error: error.message });
+  }
+  return null;
+};
+
+const getScopedAreaWhere = (req) => applyAreaScope({}, req.user);
+
+const getEmailInclude = (req, areaAttributes = ['id', 'name', 'area_type', 'province', 'district']) => {
+  const areaWhere = getScopedAreaWhere(req);
+  return {
+    model: Area,
+    as: 'area',
+    attributes: areaAttributes,
+    required: true,
+    ...(Object.keys(areaWhere).length ? { where: areaWhere } : {}),
+  };
+};
+
+const findScopedSubscriptionById = async (id, req, attributes = EMAIL_PUBLIC_ATTRIBUTES) => Email.findOne({
+  where: { id },
+  attributes,
+  include: [getEmailInclude(req)],
+});
+
+const findScopedAreaById = async (areaId, req) => {
+  const area = await Area.findByPk(areaId);
+  if (!area) return null;
+  assertAreaWithinScope(area, req.user);
+  return area;
+};
+
+const hashTokenForAudit = (token) => crypto.createHash('sha256').update(token).digest('hex').slice(0, 16);
+
 
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
   service: 'gmail', // or your email service
   auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASSWORD,
+    user: process.env.EMAIL_USER || 'your-email@gmail.com',
+    pass: process.env.EMAIL_PASS || 'your-app-password',
   },
 });
 
@@ -44,25 +99,10 @@ exports.getAllEmailSubscriptions = async (req, res) => {
       query.email = { [require('sequelize').Op.like]: `%${email}%` };
     }
 
-    const areaScope = {};
-    if (req.user && req.user.role === 'manager') {
-      if (req.user.district) {
-        areaScope.district = req.user.district;
-      } else if (req.user.province) {
-        areaScope.province = req.user.province;
-      }
-    }
-
     const options = {
       where: query,
-      include: [
-        {
-          model: Area,
-          as: 'area',
-          attributes: ['id', 'name', 'area_type', 'province', 'district'],
-          ...(Object.keys(areaScope).length ? { where: areaScope } : {}),
-        },
-      ],
+      attributes: EMAIL_PUBLIC_ATTRIBUTES,
+      include: [getEmailInclude(req)],
       order: [['created_at', 'DESC']],
       distinct: true,
     };
@@ -77,8 +117,9 @@ exports.getAllEmailSubscriptions = async (req, res) => {
     // Use findAndCountAll to avoid SQL errors with count + include
     const { rows: subscriptions, count: total } = await Email.findAndCountAll(options);
 
-    res.status(200).json({ subscriptions, total });
+    res.status(200).json({ subscriptions: sanitizeSubscriptions(subscriptions), total });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get All Email Subscriptions Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -88,7 +129,7 @@ exports.getAllEmailSubscriptions = async (req, res) => {
 exports.getAllEmailSubscriptionsNoPagination = async (req, res) => {
   try {
     const { area_id, is_active } = req.query;
-    logger.debug('Get email subscriptions query params', { query: req.query });
+    logger.debug('Get all email subscriptions without pagination', req.query);
 
     let query = {};
     if (area_id) {
@@ -98,31 +139,17 @@ exports.getAllEmailSubscriptionsNoPagination = async (req, res) => {
       query.is_active = is_active === 'true';
     }
 
-    const areaScope = {};
-    if (req.user && req.user.role === 'manager') {
-      if (req.user.district) {
-        areaScope.district = req.user.district;
-      } else if (req.user.province) {
-        areaScope.province = req.user.province;
-      }
-    }
-
     const options = {
       where: query,
-      include: [
-        {
-          model: Area,
-          as: 'area',
-          attributes: ['id', 'name', 'area_type', 'province', 'district'],
-          ...(Object.keys(areaScope).length ? { where: areaScope } : {}),
-        },
-      ],
+      attributes: EMAIL_PUBLIC_ATTRIBUTES,
+      include: [getEmailInclude(req)],
       order: [['created_at', 'DESC']],
     };
 
     const subscriptions = await Email.findAll(options);
-    res.status(200).json({ subscriptions });
+    res.status(200).json({ subscriptions: sanitizeSubscriptions(subscriptions) });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get All Email Subscriptions (No Pagination) Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -131,31 +158,16 @@ exports.getAllEmailSubscriptionsNoPagination = async (req, res) => {
 // Stats for email subscriptions: cumulative by day/month (optimized for charts)
 exports.getEmailSubscriptionStats = async (req, res) => {
   try {
-    const { is_active = 'true', granularity = 'day', limit = 12, role, province = null, district = null } = req.query;
+    const { is_active = 'true', granularity = 'day', limit = 12 } = req.query;
 
     let query = {};
     if (is_active !== undefined) {
       query.is_active = is_active === 'true';
     }
-    const areaScope = {};
-    if (role === 'manager') {
-      if (district) {
-        areaScope.district = district;
-      } else if (province) {
-        areaScope.province = province;
-      }
-    }
-
     const options = {
       where: query,
-      include: [
-        {
-          model: Area,
-          as: 'area',
-          attributes: ['id', 'name', 'area_type', 'province', 'district'],
-          ...(Object.keys(areaScope).length ? { where: areaScope } : {}),
-        },
-      ],
+      attributes: ['id', 'area_id', 'is_active', 'created_at', 'updated_at'],
+      include: [getEmailInclude(req)],
       order: [['created_at', 'ASC']],
     };
 
@@ -268,15 +280,6 @@ exports.getEmailSubscriptionStats = async (req, res) => {
 
 
 
-    console.log('📊 [Backend] Email stats series:', {
-      length: series.length,
-      expected: limitNum,
-      matches: series.length === limitNum,
-      firstItem: series[0],
-      lastItem: series[series.length - 1],
-    });
-    console.log('haha', series);
-
     return res.status(200).json({
       series,
       totalSubscriptions: subscriptions.length,
@@ -284,6 +287,7 @@ exports.getEmailSubscriptionStats = async (req, res) => {
       limit: limitNum,
     });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Email Subscription Stats Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -296,23 +300,15 @@ exports.getEmailSubscriptionById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const subscription = await Email.findOne({
-      where: { id },
-      include: [
-        {
-          model: Area,
-          as: 'area',
-          attributes: ['id', 'name', 'area_type'],
-        },
-      ],
-    });
+    const subscription = await findScopedSubscriptionById(id, req);
 
     if (!subscription) {
       return res.status(404).json({ error: 'Email subscription not found' });
     }
 
-    res.status(200).json(subscription);
+    res.status(200).json(sanitizeSubscription(subscription));
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Email Subscription Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -486,7 +482,7 @@ exports.verifyOTPAndSubscribe = async (req, res) => {
 
     res.status(200).json({
       message: 'Successfully subscribed to prediction notifications',
-      subscription: subscriptionWithArea,
+      subscription: sanitizeSubscription(subscriptionWithArea),
     });
   } catch (error) {
     logger.error('Verify OTP and Subscribe Error:', error);
@@ -507,7 +503,7 @@ exports.subscribeToPredictions = async (req, res) => {
     }
 
     // Check if area exists
-    const area = await Area.findByPk(area_id);
+    const area = await findScopedAreaById(area_id, req);
     if (!area) {
       return res.status(404).json({ error: 'Area not found' });
     }
@@ -540,7 +536,7 @@ exports.subscribeToPredictions = async (req, res) => {
 
         return res.status(200).json({
           message: 'Subscription reactivated successfully',
-          subscription: subscriptionWithArea,
+          subscription: sanitizeSubscription(subscriptionWithArea),
         });
       }
     }
@@ -568,9 +564,10 @@ exports.subscribeToPredictions = async (req, res) => {
 
     res.status(201).json({
       message: 'Successfully subscribed to prediction notifications',
-      subscription: subscriptionWithArea,
+      subscription: sanitizeSubscription(subscriptionWithArea),
     });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Subscribe to Predictions Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -582,14 +579,14 @@ exports.updateEmailSubscription = async (req, res) => {
     const { id } = req.params;
     const { email, area_id, is_active } = req.body;
 
-    const subscription = await Email.findByPk(id);
+    const subscription = await findScopedSubscriptionById(id, req);
     if (!subscription) {
       return res.status(404).json({ error: 'Email subscription not found' });
     }
 
     // Check if area exists if area_id is being updated
     if (area_id) {
-      const area = await Area.findByPk(area_id);
+      const area = await findScopedAreaById(area_id, req);
       if (!area) {
         return res.status(404).json({ error: 'Area not found' });
       }
@@ -621,17 +618,13 @@ exports.updateEmailSubscription = async (req, res) => {
 
     const updatedSubscription = await Email.findOne({
       where: { id },
-      include: [
-        {
-          model: Area,
-          as: 'area',
-          attributes: ['id', 'name', 'area_type'],
-        },
-      ],
+      attributes: EMAIL_PUBLIC_ATTRIBUTES,
+      include: [getEmailInclude(req)],
     });
 
-    res.status(200).json(updatedSubscription);
+    res.status(200).json(sanitizeSubscription(updatedSubscription));
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Update Email Subscription Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -642,7 +635,10 @@ exports.deleteEmailSubscription = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const subscription = await Email.findByPk(id);
+    const subscription = await Email.findOne({
+      where: { id },
+      include: [getEmailInclude(req)],
+    });
     if (!subscription) {
       return res.status(404).json({ error: 'Email subscription not found' });
     }
@@ -652,6 +648,7 @@ exports.deleteEmailSubscription = async (req, res) => {
       .status(200)
       .json({ message: 'Email subscription deleted successfully' });
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Delete Email Subscription Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -681,7 +678,7 @@ exports.sendPredictionNotification = async (areaId, predictionData) => {
     }
 
     const area = subscriptions[0].area;
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const baseUrl = FRONTEND_BASE_URL;
 
     // Email content
     const isBatchPrediction = predictionData.batchPrediction;
@@ -742,7 +739,7 @@ exports.sendPredictionNotification = async (areaId, predictionData) => {
     await Promise.all(emailPromises);
     logger.info('Sent prediction notification emails', {
       areaId,
-      count: subscriptions.length,
+      subscriptionCount: subscriptions.length,
     });
   } catch (error) {
     logger.error('Send Prediction Notification Error:', error);
@@ -755,10 +752,15 @@ exports.unsubscribeFromPredictions = async (req, res) => {
   try {
     const { token } = req.params;
 
-    if (!token) {
+    if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
+      logger.warn('Invalid unsubscribe token format', {
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+      });
       return res.status(400).json({ error: 'Unsubscribe token is required' });
     }
 
+    const tokenHash = hashTokenForAudit(token);
     const subscription = await Email.findOne({
       where: { unsubscribe_token: token },
       include: [
@@ -771,10 +773,22 @@ exports.unsubscribeFromPredictions = async (req, res) => {
     });
 
     if (!subscription) {
+      logger.warn('Unsubscribe token not found', {
+        tokenHash,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+      });
       return res.status(404).json({ error: 'Invalid unsubscribe token' });
     }
 
     if (!subscription.is_active) {
+      logger.info('Unsubscribe token reused for inactive subscription', {
+        tokenHash,
+        subscriptionId: subscription.id,
+        areaId: subscription.area_id,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+      });
       return res.status(400).json({
         message:
           'You are already unsubscribed from prediction notifications for this area',
@@ -784,6 +798,14 @@ exports.unsubscribeFromPredictions = async (req, res) => {
 
     subscription.is_active = false;
     await subscription.save();
+
+    logger.info('Subscription unsubscribed by token', {
+      tokenHash,
+      subscriptionId: subscription.id,
+      areaId: subscription.area_id,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.status(200).json({
       message: 'Successfully unsubscribed from prediction notifications',
@@ -838,7 +860,7 @@ exports.sendManualNotification = async (req, res) => {
     }
 
     // Get area information
-    const area = await Area.findByPk(areaId);
+    const area = await findScopedAreaById(areaId, req);
     if (!area) {
       return res.status(404).json({ error: 'Area not found' });
     }
@@ -876,7 +898,7 @@ exports.sendManualNotification = async (req, res) => {
       });
     }
 
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const baseUrl = FRONTEND_BASE_URL;
     const subject = `Thông báo dự đoán thủ công - Khu vực: ${area.name}`;
 
     // Send emails to all target users
@@ -940,6 +962,7 @@ exports.sendManualNotification = async (req, res) => {
     });
 
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Send Manual Notification Error:', error);
     res.status(500).json({ error: error.message });
   }
@@ -955,7 +978,7 @@ exports.getAreaSubscribers = async (req, res) => {
     }
 
     // Get area information
-    const area = await Area.findByPk(areaId);
+    const area = await findScopedAreaById(areaId, req);
     if (!area) {
       return res.status(404).json({ error: 'Area not found' });
     }
@@ -984,6 +1007,7 @@ exports.getAreaSubscribers = async (req, res) => {
     });
 
   } catch (error) {
+    if (handleAreaScopeError(res, error)) return;
     logger.error('Get Area Subscribers Error:', error);
     res.status(500).json({ error: error.message });
   }

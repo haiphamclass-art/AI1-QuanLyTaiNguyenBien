@@ -25,7 +25,7 @@ const router = express.Router();
  *     summary: Get all email subscriptions (Admin/Manager only)
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -74,10 +74,6 @@ const router = express.Router();
      *                         type: boolean
      *                         description: Subscription status
      *                         example: true
-     *                       unsubscribe_token:
-     *                         type: string
-     *                         description: Unique unsubscribe token
-     *                         example: "abc123def456ghi789"
      *                       created_at:
      *                         type: string
      *                         format: date-time
@@ -95,8 +91,8 @@ const router = express.Router();
  *       403:
  *         description: Forbidden
  */
-router.get('/', authenticate, authorize(['admin', 'manager']), getAllEmailSubscriptions);
-router.get('/all', authenticate, authorize(['admin', 'manager']), getAllEmailSubscriptionsNoPagination);
+router.get('/', authenticate, authorize(['admin']), getAllEmailSubscriptions);
+router.get('/all', authenticate, authorize(['admin']), getAllEmailSubscriptionsNoPagination);
 
 /**
  * @swagger
@@ -105,7 +101,7 @@ router.get('/all', authenticate, authorize(['admin', 'manager']), getAllEmailSub
  *     summary: Get email subscription statistics (cumulative by day)
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: is_active
@@ -141,7 +137,7 @@ router.get('/all', authenticate, authorize(['admin', 'manager']), getAllEmailSub
 router.get(
   '/stats/subscriptions',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize(['admin']),
   getEmailSubscriptionStats
 );
 
@@ -152,7 +148,7 @@ router.get(
  *     summary: Get email subscription by ID (Admin only)
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -185,10 +181,6 @@ router.get(
      *                   type: boolean
      *                   description: Subscription status
      *                   example: true
-     *                 unsubscribe_token:
-     *                   type: string
-     *                   description: Unique unsubscribe token
-     *                   example: "abc123def456ghi789"
      *                 created_at:
      *                   type: string
      *                   format: date-time
@@ -209,7 +201,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize(['admin']),
   getEmailSubscriptionById
 );
 
@@ -295,7 +287,7 @@ router.post('/verify-otp', verifyOTPAndSubscribe);
  * @swagger
  * /emails/subscribe:
  *   post:
- *     summary: Subscribe to prediction notifications (Legacy endpoint)
+ *     summary: Subscribe to prediction notifications (Legacy admin endpoint)
  *     tags: [Emails]
  *     requestBody:
  *       required: true
@@ -326,7 +318,7 @@ router.post('/verify-otp', verifyOTPAndSubscribe);
  *       500:
  *         description: Server error
  */
-router.post('/subscribe', subscribeToPredictions);
+router.post('/subscribe', authenticate, authorize(['admin']), subscribeToPredictions);
 
 /**
  * @swagger
@@ -362,7 +354,7 @@ router.get('/unsubscribe/:token', unsubscribeFromPredictions);
  *     summary: Update email subscription
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -403,7 +395,7 @@ router.get('/unsubscribe/:token', unsubscribeFromPredictions);
 router.put(
   '/:id',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize(['admin']),
   updateEmailSubscription
 );
 
@@ -414,7 +406,7 @@ router.put(
  *     summary: Delete email subscription (Admin only)
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -439,7 +431,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize(['admin']),
   deleteEmailSubscription
 );
 
@@ -450,7 +442,7 @@ router.delete(
  *     summary: Test email sending (Admin only)
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -486,7 +478,7 @@ router.delete(
  *       403:
  *         description: Forbidden
  */
-router.post('/test', authenticate, authorize(['admin', 'manager']), testEmail);
+router.post('/test', authenticate, authorize(['admin']), testEmail);
 
 /**
  * @swagger
@@ -495,7 +487,7 @@ router.post('/test', authenticate, authorize(['admin', 'manager']), testEmail);
  *     summary: Get email subscribers for an area
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: areaId
@@ -519,7 +511,7 @@ router.post('/test', authenticate, authorize(['admin', 'manager']), testEmail);
  *       404:
  *         description: Area not found
  */
-router.get('/area/:areaId/subscribers', authenticate, authorize(['admin', 'manager']), getAreaSubscribers);
+router.get('/area/:areaId/subscribers', authenticate, authorize(['admin']), getAreaSubscribers);
 
 /**
  * @swagger
@@ -528,7 +520,7 @@ router.get('/area/:areaId/subscribers', authenticate, authorize(['admin', 'manag
  *     summary: Send manual notification
  *     tags: [Emails]
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -545,10 +537,10 @@ router.get('/area/:areaId/subscribers', authenticate, authorize(['admin', 'manag
  *                 example: 1
  *               subject:
  *                 type: string
- *                 example: "Thông báo quan trọng"
+ *                 example: "ThÃ´ng bÃ¡o quan trá»ng"
  *               content:
  *                 type: string
- *                 example: "Nội dung thông báo"
+ *                 example: "Ná»™i dung thÃ´ng bÃ¡o"
  *     responses:
  *       200:
  *         description: Manual notification sent successfully
@@ -563,6 +555,6 @@ router.get('/area/:areaId/subscribers', authenticate, authorize(['admin', 'manag
  *       403:
  *         description: Forbidden
  */
-router.post('/send-manual', authenticate, authorize(['admin', 'manager']), sendManualNotification);
+router.post('/send-manual', authenticate, authorize(['admin']), sendManualNotification);
 
 module.exports = router;
