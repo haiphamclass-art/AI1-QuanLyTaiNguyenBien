@@ -45,10 +45,17 @@ const OYSTER_INPUT_FIELDS = [
 ];
 
 const OYSTER_MODEL_FIELDS = [
+  'Nhiệt độ nước biển',
+  'Nhiệt độ không khí',
   'DO',
   'pH',
   'Độ mặn',
+  'Độ kiềm',
   'Độ trong',
+  'NH3',
+  'H2S',
+  'BOD5(20C)',
+  'COD',
   'TSS',
   'Coliform',
   'CN-',
@@ -59,7 +66,6 @@ const OYSTER_MODEL_FIELDS = [
   'Hg',
   'Zn',
   'Tổng Crom',
-  'Nhiệt độ nước biển',
 ];
 
 const INPUT_FIELDS_BY_AREA_TYPE = {

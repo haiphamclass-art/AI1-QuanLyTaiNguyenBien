@@ -190,14 +190,18 @@ OYSTER_INPUT_FIELDS = [
     'Tổng Crom',
 ]
 
-# Current oyster .pkl files expose n_features_in_=15 and stack metadata lists
-# these 15 core features. The remaining oyster input fields are accepted and
-# stored by Express, but are not sent to the model.
 OYSTER_PREDICTION_FIELDS = [
+    'Nhiệt độ nước biển',
+    'Nhiệt độ không khí',
     'DO',
     'pH',
     'Độ mặn',
+    'Độ kiềm',
     'Độ trong',
+    'NH3',
+    'H2S',
+    'BOD5(20C)',
+    'COD',
     'TSS',
     'Coliform',
     'CN-',
@@ -208,7 +212,6 @@ OYSTER_PREDICTION_FIELDS = [
     'Hg',
     'Zn',
     'Tổng Crom',
-    'Nhiệt độ nước biển',
 ]
 
 PREDICTION_FIELDS_BY_SPECIES = {

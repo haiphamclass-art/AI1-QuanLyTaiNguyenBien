@@ -373,11 +373,8 @@ def _has_class_labels(model):
 
 
 def _score_to_prediction_label(score):
-    if score >= 0.75:
-        return 1
-    if score >= 0.25:
-        return 0
-    return -1
+    levels = [(1.0, 1), (0.75, 0), (0.0, -1)]
+    return min(levels, key=lambda item: abs(score - item[0]))[1]
 
 
 def _prediction_to_label(model, prediction_value):
